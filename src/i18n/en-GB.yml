@@ -515,6 +515,8 @@ ticket:
       topic: Topic
     title: ℹ️ Reference
   released: ♻️ {user} has released this ticket.
+  web_reply:
+    author: "{name} (via the web)"
   working_hours:
     holiday:
       description:
