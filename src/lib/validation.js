@@ -315,7 +315,34 @@ const question = {
 		options: { max: 4000 },
 		type: 'int',
 	},
-	options: { type: 'json' },
+	// options for "MENU" questions (upstream #446)
+	options: {
+		type: (value, field) => {
+			if (typeof value === 'string') {
+				try {
+					value = JSON.parse(value);
+				} catch {
+					throw new ValidationError(field, 'expected an array of options');
+				}
+			}
+			if (!Array.isArray(value)) throw new ValidationError(field, 'expected an array of options');
+			if (value.length > 25) throw new ValidationError(field, 'a menu can have at most 25 options');
+			return value.map((option, i) => {
+				const label = typeof option?.label === 'string' ? option.label.trim() : '';
+				if (!label || label.length > 100) throw new ValidationError(`${field}[${i}].label`, 'expected 1 to 100 characters');
+				const clean = { label };
+				if (option.description !== undefined && option.description !== null && option.description !== '') {
+					if (typeof option.description !== 'string' || option.description.length > 100) throw new ValidationError(`${field}[${i}].description`, 'expected up to 100 characters');
+					clean.description = option.description;
+				}
+				if (option.emoji !== undefined && option.emoji !== null && option.emoji !== '') {
+					if (typeof option.emoji !== 'string' || option.emoji.length > 64) throw new ValidationError(`${field}[${i}].emoji`, 'expected an emoji');
+					clean.emoji = option.emoji;
+				}
+				return clean;
+			});
+		},
+	},
 	order: { type: 'int' },
 	placeholder: {
 		nullable: true,
@@ -371,7 +398,14 @@ function sanitizeCategory(body) {
 	if (body.questions !== undefined) {
 		if (!Array.isArray(body.questions)) throw new ValidationError('questions', 'expected an array');
 		if (body.questions.length > 25) throw new ValidationError('questions', 'too many questions');
-		questions = body.questions.map(q => sanitize(q, question));
+		questions = body.questions.map((q, i) => {
+			const clean = sanitize(q, question);
+			if (clean.type === 'MENU' && !clean.options?.length) throw new ValidationError(`questions[${i}].options`, 'a menu needs at least one option');
+			if (new Set((clean.options ?? []).map(o => o.label)).size !== (clean.options ?? []).length) {
+				throw new ValidationError(`questions[${i}].options`, 'option labels must be different');
+			}
+			return clean;
+		});
 	}
 	return {
 		data,

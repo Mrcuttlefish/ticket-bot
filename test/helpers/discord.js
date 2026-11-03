@@ -278,7 +278,14 @@ function makeInteraction({
 		deferUpdate: record('deferUpdate'),
 		deferred: false,
 		editReply: record('editReply'),
-		fields: { getTextInputValue: name => fields[name] ?? '' },
+		// text answers are strings, menu answers are arrays of option values
+		fields: {
+			getStringSelectValues: name => {
+				if (!Array.isArray(fields[name])) throw new Error(`No select menu "${name}"`);
+				return fields[name];
+			},
+			getTextInputValue: name => (Array.isArray(fields[name]) ? '' : fields[name] ?? ''),
+		},
 		followUp: record('followUp'),
 		guild: member.guild,
 		guildId: member.guild.id,

@@ -3,6 +3,7 @@ const {
 	EmbedBuilder, MessageFlags,
 } = require('discord.js');
 const { editOpeningDetails } = require('../lib/tickets/opening-message');
+const { readAnswer } = require('../lib/tickets/question-input');
 const ExtendedEmbedBuilder = require('../lib/embed');
 const { logTicketEvent } = require('../lib/logging');
 const { pools } = require('../lib/threads');
@@ -58,7 +59,7 @@ module.exports = class QuestionsModal extends Modal {
 			const plainTextAnswers = await Promise.all(
 				original.questionAnswers
 					.map(async answer => ({
-						after: interaction.fields.getTextInputValue(String(answer.id)),
+						after: readAnswer(interaction.fields, answer.question, answer.id),
 						before: answer.value ? await crypto.queue(w => w.decrypt(answer.value)) : '',
 						id: answer.id,
 						question: answer.question,
@@ -69,18 +70,18 @@ module.exports = class QuestionsModal extends Modal {
 			if (category.customTopic) {
 				const customTopicAnswer = original.questionAnswers.find(a => a.question.id === category.customTopic);
 				if (!customTopicAnswer) throw new Error('Custom topic answer not found');
-				topic = interaction.fields.getTextInputValue(String(customTopicAnswer.id));
+				topic = readAnswer(interaction.fields, customTopicAnswer.question, customTopicAnswer.id) || null;
 			}
 
 			const ticket = await client.prisma.ticket.update({
 				data: {
 					questionAnswers: {
+						// nested updates can only change this ticket's answers
 						update: await Promise.all(
-							interaction.fields.fields
-								.map(async f => ({
-									data: { value: f.value ? await crypto.queue(w => w.encrypt(f.value)) : '' },
-									where: { id: Number(f.customId) },
-								})),
+							plainTextAnswers.map(async a => ({
+								data: { value: a.after ? await crypto.queue(w => w.encrypt(a.after)) : '' },
+								where: { id: a.id },
+							})),
 						),
 					},
 					topic: topic ? await crypto.queue(w => w.encrypt(topic)) : null,
