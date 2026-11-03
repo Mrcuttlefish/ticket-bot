@@ -89,7 +89,13 @@ test('export a server and import it into another (existing data migrates cleanly
 		url: `/api/admin/guilds/${source.id}`,
 	});
 	assert.equal(overview.json().ownerId, owner.id, 'the dashboard can tell who the owner is');
+	assert.equal(overview.json().canManageData, false);
 	const token = sign(owner.id);
+	const asOwner = await app.inject({
+		headers: { authorization: `Bearer ${token}` },
+		url: `/api/admin/guilds/${source.id}`,
+	});
+	assert.equal(asOwner.json().canManageData, true);
 	const exported = await app.inject({
 		headers: { authorization: `Bearer ${token}` },
 		url: `/api/admin/guilds/${source.id}/export`,

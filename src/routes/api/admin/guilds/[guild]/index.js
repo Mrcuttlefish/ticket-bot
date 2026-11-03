@@ -105,10 +105,13 @@ module.exports.get = fastify => ({
 			await client.keyv.set(cacheKey, cached, ms('5m'));
 		}
 
+		const guild = client.guilds.cache.get(id);
 		return {
 			...cached,
-			// not cached, as ownership can change; the dashboard only offers owner-only actions to the owner
-			ownerId: client.guilds.cache.get(id)?.ownerId ?? null,
+			// not cached (they depend on the viewer, and ownership can change); the dashboard only offers export and
+			// import to those who can use them (see the isOwner hook)
+			canManageData: client.supers.includes(req.user.id) || guild?.ownerId === req.user.id,
+			ownerId: guild?.ownerId ?? null,
 		};
 	},
 	onRequest: [fastify.authenticate, fastify.isAdmin],
