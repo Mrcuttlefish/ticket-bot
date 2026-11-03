@@ -83,3 +83,36 @@ test('malformed settings fail open', () => {
 	assert.deepEqual(getWorkingStatus(undefined), { working: true });
 	assert.deepEqual(getWorkingStatus(['UTC']), { working: true });
 });
+
+test('holidays are not working days (upstream #403)', () => {
+	// Tuesday 3rd is a holiday, so staff are back on Wednesday
+	const status = getWorkingStatus(weekdays('Europe/London'), at('2026-11-03T10:30:00'), ['2026-11-03']);
+	assert.deepEqual(status, {
+		holiday: true,
+		startsToday: false,
+		timestamp: unix('2026-11-04T09:00:00'),
+		working: false,
+	});
+});
+
+test('holidays are skipped when finding the next working day', () => {
+	// Friday evening, with Monday and Tuesday off: back on Wednesday
+	const status = getWorkingStatus(weekdays('Europe/London'), at('2026-11-06T18:00:00'), ['2026-11-09', '2026-11-10']);
+	assert.deepEqual(status, {
+		startsToday: false,
+		timestamp: unix('2026-11-11T09:00:00'),
+		working: false,
+	});
+});
+
+test('holiday dates use the working hours timezone', () => {
+	// 23:30 on the 2nd in UTC is already the 3rd in Tokyo
+	const status = getWorkingStatus(['Asia/Tokyo', ...Array(7).fill(['00:00', '23:59'])], at('2026-11-02T23:30:00', 'UTC'), ['2026-11-03']);
+	assert.equal(status.working, false);
+	assert.equal(status.holiday, true);
+	assert.equal(status.timestamp, unix('2026-11-04T00:00:00', 'Asia/Tokyo'));
+});
+
+test('a holiday on a day off changes nothing', () => {
+	assert.deepEqual(getWorkingStatus(weekdays('Europe/London'), at('2026-11-03T10:30:00'), ['2026-11-01']), { working: true });
+});

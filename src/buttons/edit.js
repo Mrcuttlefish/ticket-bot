@@ -1,6 +1,7 @@
 const { Button } = require('@eartharoid/dbf');
 const {
 	ActionRowBuilder,
+	MessageFlags,
 	ModalBuilder,
 	StringSelectMenuBuilder,
 	StringSelectMenuOptionBuilder,
@@ -8,6 +9,8 @@ const {
 	TextInputStyle,
 } = require('discord.js');
 const emoji = require('node-emoji');
+const ExtendedEmbedBuilder = require('../lib/embed');
+const { isStaff } = require('../lib/users');
 const { pools } = require('../lib/threads');
 
 const { crypto } = pools;
@@ -27,14 +30,37 @@ module.exports = class EditButton extends Button {
 		const ticket = await client.prisma.ticket.findUnique({
 			select: {
 				category: { select: { name: true } },
-				guild: { select: { locale: true } },
+				createdById: true,
+				guild: {
+					select: {
+						errorColour: true,
+						locale: true,
+					},
+				},
 				questionAnswers: { include: { question: true } },
 				topic: true,
 			},
 			where: { id: interaction.channel.id },
 		});
 
+		if (!ticket) return;
 		const getMessage = client.i18n.getLocale(ticket.guild.locale);
+
+		// only the creator can change their answers, not other members or staff (upstream #508);
+		// staff can still change the topic (like with /topic)
+		const allowed = ticket.createdById === interaction.user.id ||
+			(ticket.questionAnswers.length === 0 && await isStaff(interaction.guild, interaction.user.id));
+		if (!allowed) {
+			return await interaction.reply({
+				embeds: [
+					new ExtendedEmbedBuilder()
+						.setColor(ticket.guild.errorColour)
+						.setTitle(getMessage('misc.not_creator.title'))
+						.setDescription(getMessage('misc.not_creator.description')),
+				],
+				flags: MessageFlags.Ephemeral,
+			});
+		}
 
 		if (ticket.questionAnswers.length === 0) {
 			const field = new TextInputBuilder()

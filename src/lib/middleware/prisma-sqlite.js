@@ -7,6 +7,10 @@ const jsonFields = [
 	'workingHours',
 	'options',
 	'pinnedMessageIds',
+	'fallbackCategories',
+	'pingRoleRules',
+	'roleLimits',
+	'holidays',
 ];
 
 const traverse = (obj, action) => {

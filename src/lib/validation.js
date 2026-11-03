@@ -116,6 +116,31 @@ const workingHours = (value, field) => {
 	return value;
 };
 
+const holidays = (value, field) => {
+	const date = /^\d{4}-\d{2}-\d{2}$/;
+	if (!Array.isArray(value) || value.length > 366) throw new ValidationError(field, 'expected up to 366 dates');
+	return value.map((d, i) => {
+		if (typeof d !== 'string' || !date.test(d)) throw new ValidationError(`${field}[${i}]`, 'expected "YYYY-MM-DD"');
+		return d;
+	});
+};
+
+const roleLimits = (value, field) => {
+	if (!Array.isArray(value) || value.length > 50) throw new ValidationError(field, 'expected up to 50 { role, limit } objects');
+	return value.map((rule, i) => ({
+		limit: types.int(rule?.limit, `${field}[${i}].limit`, { max: 100 }),
+		role: types.snowflake(rule?.role, `${field}[${i}].role`),
+	}));
+};
+
+const pingRoleRules = (value, field) => {
+	if (!Array.isArray(value) || value.length > 50) throw new ValidationError(field, 'expected up to 50 { roles, ping } objects');
+	return value.map((rule, i) => ({
+		ping: types.snowflakes(rule?.ping, `${field}[${i}].ping`),
+		roles: types.snowflakes(rule?.roles, `${field}[${i}].roles`),
+	}));
+};
+
 /** @type {Record<string, FieldSpec>} */
 const guildSettings = {
 	archive: { type: 'boolean' },
@@ -128,6 +153,7 @@ const guildSettings = {
 	blocklist: { type: 'snowflakes' },
 	claimButton: { type: 'boolean' },
 	closeButton: { type: 'boolean' },
+	closeRequests: { type: 'boolean' },
 	errorColour: {
 		options: { max: 32 },
 		type: 'string',
@@ -137,6 +163,8 @@ const guildSettings = {
 		options: { max: 2048 },
 		type: 'string',
 	},
+	ghostPing: { type: 'boolean' },
+	holidays: { type: holidays },
 	locale: {
 		options: { max: 16 },
 		type: 'string',
@@ -157,6 +185,10 @@ const guildSettings = {
 	successColour: {
 		options: { max: 32 },
 		type: 'string',
+	},
+	ticketNumberOffset: {
+		options: { max: 1e9 },
+		type: 'int',
 	},
 	workingHours: { type: workingHours },
 };
@@ -188,6 +220,7 @@ const category = {
 		type: 'string',
 	},
 	enableFeedback: { type: 'boolean' },
+	fallbackCategories: { type: 'snowflakes' },
 	image: {
 		nullable: true,
 		options: { max: 2048 },
@@ -202,6 +235,7 @@ const category = {
 		options: { max: 4096 },
 		type: 'string',
 	},
+	pingRoleRules: { type: pingRoleRules },
 	pingRoles: { type: 'snowflakes' },
 	ratelimit: {
 		nullable: true,
@@ -209,6 +243,7 @@ const category = {
 	},
 	requireTopic: { type: 'boolean' },
 	requiredRoles: { type: 'snowflakes' },
+	roleLimits: { type: roleLimits },
 	staffRoles: { type: 'snowflakes' },
 	totalLimit: { type: 'int' },
 };

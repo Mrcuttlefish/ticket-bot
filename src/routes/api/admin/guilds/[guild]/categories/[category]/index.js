@@ -1,9 +1,6 @@
 const { logAdminEvent } = require('../../../../../../../lib/logging');
-const { ChannelType: { GuildCategory } } = require('discord.js');
-const {
-	ValidationError,
-	sanitizeCategory,
-} = require('../../../../../../../lib/validation');
+const { sanitizeCategory } = require('../../../../../../../lib/validation');
+const { checkCategoryRefs } = require('../../../../../../../lib/category-refs');
 const {
 	updateCommandPermissions,
 	updateStaffRoles,
@@ -90,18 +87,8 @@ module.exports.patch = fastify => ({
 			questions,
 		} = sanitizeCategory(req.body);
 
-		// drop roles that aren't in this server (e.g. deleted roles, or roles from another server)
-		for (const field of ['staffRoles', 'pingRoles', 'requiredRoles']) {
-			if (data[field]) data[field] = data[field].filter(id => guild.roles.cache.has(id));
-		}
-
-		if (data.discordCategory) {
-			const channel = client.channels.cache.get(data.discordCategory);
-			// unknown channels are tolerated (it may have been deleted), but not channels from another server
-			if (channel && (channel.guildId !== guild.id || channel.type !== GuildCategory)) {
-				throw new ValidationError('discordCategory', 'must be a category channel in this server');
-			}
-		}
+		// drop roles that aren't in this server and reject Discord categories from other servers
+		checkCategoryRefs(guild, data, id => client.channels.cache.get(id));
 
 		const select = {
 			channelName: true,
@@ -111,12 +98,14 @@ module.exports.patch = fastify => ({
 			discordCategory: true,
 			emoji: true,
 			enableFeedback: true,
+			fallbackCategories: true,
 			guildId: true,
 			id: true,
 			image: true,
 			memberLimit: true,
 			name: true,
 			openingMessage: true,
+			pingRoleRules: true,
 			pingRoles: true,
 			questions: {
 				select: {
@@ -137,6 +126,7 @@ module.exports.patch = fastify => ({
 			ratelimit: true,
 			requireTopic: true,
 			requiredRoles: true,
+			roleLimits: true,
 			staffRoles: true,
 			totalLimit: true,
 		};

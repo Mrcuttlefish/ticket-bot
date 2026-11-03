@@ -14,6 +14,7 @@ const {
 	isStaff,
 } = require('../../lib/users');
 const ms = require('ms');
+const { handleGhostPing } = require('../../lib/tickets/ghost-ping');
 const { compileTagRegex } = require('../../lib/security');
 const { fillTagPlaceholders } = require('../../lib/tags');
 const emoji = require('node-emoji');
@@ -210,11 +211,11 @@ module.exports = class extends Listener {
 					}).catch(client.log.error);
 
 					// set first and last message timestamps
+					const staff = await isStaff(message.guild, message.author.id);
 					const data = { lastMessageAt: new Date() };
-					if (
-						ticket.firstResponseAt === null &&
-						await isStaff(message.guild, message.author.id)
-					) data.firstResponseAt = new Date();
+					if (ticket.firstResponseAt === null && staff) data.firstResponseAt = new Date();
+
+					handleGhostPing(client, message, ticket, settings, staff).catch(client.log.error);
 					ticket = await client.prisma.ticket.update({
 						data,
 						where: { id: ticket.id },
@@ -225,7 +226,7 @@ module.exports = class extends Listener {
 						const $ticket = client.tickets.$stale.get(ticket.id);
 						$ticket.messages++;
 						if ($ticket.messages >= 1) {
-							await message.channel.messages.delete($ticket.message.id);
+							if ($ticket.message) await message.channel.messages.delete($ticket.message.id).catch(() => null);
 							client.tickets.$stale.delete(ticket.id);
 						} else {
 							client.tickets.$stale.set(ticket.id, $ticket);
