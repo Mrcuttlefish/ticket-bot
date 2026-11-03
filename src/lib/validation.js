@@ -8,6 +8,8 @@
  */
 
 const SNOWFLAKE = /^\d{17,20}$/;
+// durations are in milliseconds but stored in seconds (see middleware/prisma-durations.js)
+const MAX_DURATION = (2 ** 31 - 1) * 1000;
 
 class ValidationError extends Error {
 	constructor(field, message) {
@@ -119,6 +121,7 @@ const guildSettings = {
 	archive: { type: 'boolean' },
 	autoClose: {
 		nullable: true,
+		options: { max: MAX_DURATION },
 		type: 'int',
 	},
 	autoTag: { type: autoTag },
@@ -148,6 +151,7 @@ const guildSettings = {
 	},
 	staleAfter: {
 		nullable: true,
+		options: { max: MAX_DURATION },
 		type: 'int',
 	},
 	successColour: {
@@ -166,6 +170,7 @@ const category = {
 	claiming: { type: 'boolean' },
 	cooldown: {
 		nullable: true,
+		options: { max: MAX_DURATION },
 		type: 'int',
 	},
 	customTopic: {

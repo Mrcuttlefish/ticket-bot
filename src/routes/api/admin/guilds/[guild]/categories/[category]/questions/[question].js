@@ -9,7 +9,10 @@ module.exports.delete = fastify => ({
 		const questionId = req.params.question;
 		const original = questionId && await client.prisma.question.findUnique({ where: { id: questionId } });
 		const category = categoryId && await client.prisma.category.findUnique({ where: { id: categoryId } });
-		if (!original || !category || original.categoryId !== categoryId || category.guildId !== guildId) return res.status(400).send(new Error('Bad Request'));
+		if (!category || category.guildId !== guildId) return res.status(400).send(new Error('Bad Request'));
+		// a question that was added in the form but never saved doesn't exist yet; deleting it is a no-op (upstream #465)
+		if (!original) return { id: questionId };
+		if (original.categoryId !== categoryId) return res.status(400).send(new Error('Bad Request'));
 		const question = await client.prisma.question.delete({ where: { id: questionId } });
 
 		logAdminEvent(client, {
