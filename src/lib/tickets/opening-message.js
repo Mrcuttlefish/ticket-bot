@@ -1,6 +1,8 @@
 /**
  * Builds a ticket's opening message, either as embeds (the default) or with Discord's layout components
- * ("Components V2", upstream #655) when the guild turns `componentsV2` on.
+ * ("Components V2", upstream #655) when the guild turns `componentsV2` on. Categories can instead use plain text
+ * (`openingStyle: 'TEXT'`) or turn the opening message off (`'OFF'`: only the mentions, the topic or answers, and
+ * the buttons are sent; the ticket still needs a message to hold the buttons).
  *
  * The opening message is edited later (claiming changes the buttons, editing the topic or answers changes the
  * details), so this module also handles those edits for both styles. In the V2 style, the parts that change are
@@ -39,6 +41,11 @@ const LIMITS = {
 	footer: 200,
 	intro: 1800,
 };
+
+// Discord's limit for a message's content
+const TEXT_LIMIT = 2000;
+// in text opening messages, the topic or answers come after this line so they can be replaced when edited
+const DETAILS_MARK = '\n\u200b\n';
 
 const truncate = (text, max) => (text.length > max ? text.slice(0, max - 1) + '…' : text);
 
@@ -110,6 +117,7 @@ function buildButtons({
 
 /**
  * @param {object} options
+ * @param {'EMBED'|'TEXT'|'OFF'} [options.style] the category's opening message style; EMBED uses `v2`
  * @param {boolean} options.v2 use layout components instead of embeds
  * @param {string} options.colour
  * @param {string} options.content the text above the message (mentions the creator and staff)
@@ -122,6 +130,7 @@ function buildButtons({
  * @returns {import('discord.js').MessageCreateOptions}
  */
 function buildOpeningMessage({
+	style = 'EMBED',
 	v2,
 	colour,
 	content,
@@ -132,6 +141,19 @@ function buildOpeningMessage({
 	footer = null,
 	buttons = null,
 }) {
+	if (style === 'TEXT' || style === 'OFF') {
+		const head = style === 'TEXT'
+			? [content, `**${author.name}**`, description, image].filter(Boolean).join('\n\n')
+			: content;
+		return {
+			// the text can include things members wrote (the topic and answers, or placeholders in the opening message),
+			// so only the creator and roles mentioned in `content` are pinged, as with embeds
+			allowedMentions: getAllowedMentions(content),
+			components: buttons ? [buttons] : [],
+			content: buildText(head, fields),
+		};
+	}
+
 	if (!v2) {
 		const embeds = [
 			new ExtendedEmbedBuilder()
@@ -196,6 +218,30 @@ function buildOpeningMessage({
 }
 
 /**
+ * The users and roles mentioned in a trusted piece of text (the mentions line written by the bot).
+ * @param {string} text
+ * @returns {{ parse: [], roles: string[], users: string[] }}
+ */
+function getAllowedMentions(text) {
+	return {
+		parse: [],
+		roles: [...new Set([...(text ?? '').matchAll(/<@&(\d{17,20})>/g)].map(m => m[1]))],
+		users: [...new Set([...(text ?? '').matchAll(/<@!?(\d{17,20})>/g)].map(m => m[1]))],
+	};
+}
+
+/**
+ * A text opening message: the head, then the topic or answers after `DETAILS_MARK`, within Discord's limit.
+ * @param {string} head
+ * @param {{ name: string, value: string }[]} fields
+ * @returns {string}
+ */
+function buildText(head, fields) {
+	const details = fields.length ? truncate(fields.map(field => `**${field.name}**\n${field.value}`).join('\n\n'), LIMITS.details) : '';
+	return truncate(head, TEXT_LIMIT - DETAILS_MARK.length - details.length) + DETAILS_MARK + details;
+}
+
+/**
  * @param {import('discord.js').Message} message
  * @returns {boolean}
  */
@@ -252,6 +298,15 @@ async function editOpeningButtons(message, buttons) {
  * @returns {Promise<boolean>} false if the message doesn't have a details section to edit
  */
 async function editOpeningDetails(message, fields) {
+	if (!isV2(message) && message.embeds.length === 0 && message.content.includes(DETAILS_MARK)) {
+		// a text opening message
+		const head = message.content.slice(0, message.content.indexOf(DETAILS_MARK));
+		await message.edit({
+			allowedMentions: { parse: [] },
+			content: buildText(head, fields),
+		});
+		return true;
+	}
 	if (!isV2(message)) {
 		if (message.embeds.length < 2) return false;
 		const embeds = [...message.embeds];
@@ -273,12 +328,14 @@ async function editOpeningDetails(message, fields) {
 }
 
 module.exports = {
+	DETAILS_MARK,
 	IDS,
 	LIMITS,
 	buildButtons,
 	buildOpeningMessage,
 	editOpeningButtons,
 	editOpeningDetails,
+	getAllowedMentions,
 	isV2,
 	replaceById,
 	toColour,

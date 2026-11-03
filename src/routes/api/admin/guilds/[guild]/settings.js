@@ -43,11 +43,12 @@ module.exports.patch = fastify => ({
 		const id = req.params.guild;
 		const guild = client.guilds.cache.get(id);
 
-		if (data.logChannel) {
-			// the log channel must be a text channel in this guild
-			const channel = guild.channels.cache.get(data.logChannel);
+		for (const field of ['logChannel', 'transcriptChannel']) {
+			if (!data[field]) continue;
+			// the log and transcript channels must be text channels in this guild
+			const channel = guild.channels.cache.get(data[field]);
 			if (!channel || !channel.isTextBased() || channel.type === ChannelType.GuildVoice) {
-				throw new ValidationError('logChannel', 'must be a text channel in this server');
+				throw new ValidationError(field, 'must be a text channel in this server');
 			}
 		}
 

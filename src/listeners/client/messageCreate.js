@@ -197,6 +197,9 @@ module.exports = class extends Listener {
 				include: { category: true },
 				where: { id: message.channel.id },
 			});
+			// channels of closed tickets can be kept (categories' keepClosedFor); messages sent after closing aren't
+			// archived and don't count as ticket activity
+			if (ticket && !ticket.open) ticket = null;
 
 			if (ticket) {
 				// archive messages (categories can override the archive setting, upstream #536)

@@ -11,7 +11,7 @@
  * - results: seconds -> milliseconds
  */
 
-const FIELDS = new Set(['autoClose', 'cooldown', 'staleAfter']);
+const FIELDS = new Set(['autoClose', 'cooldown', 'keepClosedFor', 'staleAfter']);
 const MAX_SECONDS = 2 ** 31 - 1;
 
 const toSeconds = ms => {

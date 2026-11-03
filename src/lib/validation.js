@@ -145,6 +145,28 @@ const pingRoleRules = (value, field) => {
 	}));
 };
 
+// events that can be left out of the log channel (see lib/logging.js)
+const LOG_EVENTS = [
+	'admin',
+	'message.delete',
+	'message.update',
+	'ticket.claim',
+	'ticket.close',
+	'ticket.create',
+	'ticket.delete',
+	'ticket.reopen',
+	'ticket.unclaim',
+	'ticket.update',
+];
+
+const logExclude = (value, field) => {
+	if (!Array.isArray(value)) throw new ValidationError(field, 'expected an array of event names');
+	return [...new Set(value.map((event, i) => {
+		if (!LOG_EVENTS.includes(event)) throw new ValidationError(`${field}[${i}]`, `expected one of ${LOG_EVENTS.join(', ')}`);
+		return event;
+	}))];
+};
+
 const webhookUrl = (value, field) => {
 	const { checkWebhookURL } = require('./webhooks');
 	const result = checkWebhookURL(value);
@@ -187,6 +209,7 @@ const guildSettings = {
 		nullable: true,
 		type: 'snowflake',
 	},
+	logExclude: { type: logExclude },
 	primaryColour: {
 		options: { max: 32 },
 		type: 'string',
@@ -204,6 +227,11 @@ const guildSettings = {
 		options: { max: 1e9 },
 		type: 'int',
 	},
+	transcriptChannel: {
+		nullable: true,
+		type: 'snowflake',
+	},
+	transcriptDm: { type: 'boolean' },
 	webhookSecret: {
 		nullable: true,
 		options: { max: 256 },
@@ -237,7 +265,19 @@ const category = {
 		nullable: true,
 		type: 'boolean',
 	},
+	claimedCategory: {
+		nullable: true,
+		type: 'snowflake',
+	},
+	claimedChannelName: {
+		nullable: true,
+		options: { max: 100 },
+		type: 'string',
+	},
+	claimHide: { type: 'boolean' },
 	claiming: { type: 'boolean' },
+	claimReleaseLocked: { type: 'boolean' },
+	claimTakeover: { type: 'boolean' },
 	closeButton: {
 		nullable: true,
 		type: 'boolean',
@@ -268,6 +308,11 @@ const category = {
 		options: { max: 2048 },
 		type: 'string',
 	},
+	keepClosedFor: {
+		nullable: true,
+		options: { max: MAX_DURATION },
+		type: 'int',
+	},
 	memberLimit: { type: 'int' },
 	name: {
 		options: { max: 100 },
@@ -276,6 +321,12 @@ const category = {
 	openingMessage: {
 		options: { max: 4096 },
 		type: 'string',
+	},
+	openingStyle: {
+		type: (value, field) => {
+			if (!['EMBED', 'OFF', 'TEXT'].includes(value)) throw new ValidationError(field, 'expected "EMBED", "TEXT" or "OFF"');
+			return value;
+		},
 	},
 	pingRoleRules: { type: pingRoleRules },
 	pingRoles: { type: 'snowflakes' },
@@ -415,6 +466,7 @@ function sanitizeCategory(body) {
 }
 
 module.exports = {
+	LOG_EVENTS,
 	SNOWFLAKE,
 	ValidationError,
 	sanitize,

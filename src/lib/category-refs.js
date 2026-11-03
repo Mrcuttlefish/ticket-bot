@@ -32,6 +32,7 @@ function checkCategoryRefs(guild, data, getChannel) {
 		}
 	};
 	if (data.discordCategory) checkChannel(data.discordCategory, 'discordCategory');
+	if (data.claimedCategory) checkChannel(data.claimedCategory, 'claimedCategory');
 	if (data.fallbackCategories) {
 		if (data.fallbackCategories.length > 25) throw new ValidationError('fallbackCategories', 'must have at most 25 categories');
 		data.fallbackCategories.forEach((id, i) => checkChannel(id, `fallbackCategories[${i}]`));

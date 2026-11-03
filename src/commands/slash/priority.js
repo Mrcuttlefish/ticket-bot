@@ -77,6 +77,8 @@ module.exports = class PrioritySlashCommand extends SlashCommand {
 			});
 		}
 
+		if (!ticket.open) return await client.tickets.replyClosed(interaction, { guild: settings });
+
 		if (!(await isStaff(interaction.guild, interaction.user.id))) { // if user is not staff
 			return await interaction.editReply({
 				embeds: [

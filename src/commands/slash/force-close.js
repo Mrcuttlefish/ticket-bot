@@ -104,6 +104,8 @@ module.exports = class ForceCloseSlashCommand extends SlashCommand {
 				});
 			}
 
+			if (!ticket.open) return await client.tickets.replyClosed(interaction, { guild: settings });
+
 			await interaction.editReply({
 				embeds: [
 					new ExtendedEmbedBuilder({
@@ -271,6 +273,8 @@ module.exports = class ForceCloseSlashCommand extends SlashCommand {
 					],
 				});
 			}
+
+			if (!ticket.open) return await client.tickets.replyClosed(interaction, { guild: settings });
 
 			await interaction.editReply({
 				embeds: [

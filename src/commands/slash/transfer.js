@@ -72,6 +72,8 @@ module.exports = class TransferSlashCommand extends SlashCommand {
 			});
 		}
 
+		if (!ticket.open) return await client.tickets.replyClosed(interaction, ticket);
+
 		const from = ticket.createdById;
 
 		// only staff or the ticket's current owner can transfer it

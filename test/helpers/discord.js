@@ -7,6 +7,7 @@ const {
 	ChannelType,
 	Collection,
 	MessageFlagsBitField,
+	OverwriteType,
 	PermissionsBitField,
 } = require('discord.js');
 
@@ -16,7 +17,7 @@ const snowflake = () => String(++next);
 function makeRole(guild, {
 	id = snowflake(), name = 'role',
 } = {}) {
-	return {
+	const role = {
 		colour: 0,
 		createdAt: new Date(),
 		hexColor: '#000000',
@@ -25,6 +26,8 @@ function makeRole(guild, {
 		name,
 		toString: () => `<@&${id}>`,
 	};
+	guild.roles?.cache.set(id, role);
+	return role;
 }
 
 function makeUser({
@@ -125,6 +128,31 @@ function makeMessage(channel, {
 	return message;
 }
 
+/**
+ * A permission overwrite like discord.js's: `allow` and `deny` have `has(permission)`.
+ * @param {object} guild
+ * @param {string} id
+ * @param {{ allow?: string[], deny?: string[], type?: number }} [options]
+ */
+function makeOverwrite(guild, id, {
+	allow = [], deny = [], type,
+} = {}) {
+	const allowed = new Set(allow);
+	const denied = new Set(deny);
+	return {
+		allow: {
+			has: permission => allowed.has(permission),
+			set: allowed,
+		},
+		deny: {
+			has: permission => denied.has(permission),
+			set: denied,
+		},
+		id,
+		type: type ?? (guild.roles.cache.has(id) ? OverwriteType.Role : OverwriteType.Member),
+	};
+}
+
 function makeTextChannel(guild, {
 	id = snowflake(), name = 'channel', parentId = null, topic = null,
 } = {}) {
@@ -164,7 +192,18 @@ function makeTextChannel(guild, {
 		permissionOverwrites: {
 			cache: new Collection(),
 			delete: async targetId => channel.permissionOverwrites.cache.delete(targetId),
-			edit: async (targetId, options) => channel.permissionOverwrites.cache.set(targetId?.id ?? targetId, options),
+			edit: async (target, options, overwriteOptions) => {
+				const id = target?.id ?? target;
+				const overwrite = channel.permissionOverwrites.cache.get(id) ?? makeOverwrite(guild, id, { type: overwriteOptions?.type });
+				for (const [permission, value] of Object.entries(options)) {
+					overwrite.allow.set.delete(permission);
+					overwrite.deny.set.delete(permission);
+					if (value === true) overwrite.allow.set.add(permission);
+					if (value === false) overwrite.deny.set.add(permission);
+				}
+				channel.permissionOverwrites.cache.set(id, overwrite);
+				return channel;
+			},
 			set: async overwrites => {
 				channel.permissionOverwrites.cache = new Collection(overwrites.map(o => [o.id, o]));
 			},
@@ -220,7 +259,7 @@ function makeGuild(client, {
 					parentId: parent?.id ?? parent ?? null,
 					topic,
 				});
-				channel.permissionOverwrites.cache = new Collection(permissionOverwrites.map(o => [o.id, o]));
+				channel.permissionOverwrites.cache = new Collection(permissionOverwrites.map(o => [o.id, makeOverwrite(guild, o.id, o)]));
 				guild.created.push(channel);
 				return channel;
 			},
@@ -354,6 +393,7 @@ module.exports = {
 	makeInteraction,
 	makeMember,
 	makeMessage,
+	makeOverwrite,
 	makeRole,
 	makeTextChannel,
 	makeUser,
