@@ -70,6 +70,25 @@ module.exports.post = fastify => ({
 			});
 		}
 
+		// editable panels (upstream #362): pass `message` (the ID of an existing panel in `channel`) to update it in place
+		let existing = null;
+		if (data.message) {
+			if (!data.channel) throw new Error('`message` requires `channel`');
+			const messageId = String(data.message).split('/').pop(); // accept an ID or a message link
+			existing = await channel.messages.fetch(messageId).catch(() => null);
+			if (!existing || existing.author.id !== client.user.id) {
+				return res.code(400).send({
+					error: 'Bad Request',
+					message: 'The message to edit must be a panel sent by the bot in the selected channel.',
+					statusCode: 400,
+				});
+			}
+		}
+		const publish = payload => (existing ? existing.edit({
+			components: [],
+			...payload,
+		}) : channel.send(payload));
+
 		const embed = new EmbedBuilder()
 			.setColor(settings.primaryColour);
 
@@ -86,11 +105,12 @@ module.exports.post = fastify => ({
 		if (data.thumbnail) embed.setThumbnail(data.thumbnail);
 
 		if (data.type === 'MESSAGE') {
-			await channel.send({ embeds: [embed] });
+			await publish({ embeds: [embed] });
 		} else {
 			const components = [];
 
-			if (categories.length === 1) {
+			if (categories.length === 1 && data.type !== 'BUTTON') {
+				// a single-category "menu" panel shows one generic button
 				components.push(
 					new ButtonBuilder()
 						.setCustomId(JSON.stringify({
@@ -102,6 +122,7 @@ module.exports.post = fastify => ({
 						.setEmoji(getMessage('buttons.create.emoji')),
 				);
 			} else if (data.type === 'BUTTON') {
+				// button panels use each category's name and emoji, even with a single category (upstream #450, #616)
 				components.push(
 					...categories.map(category =>
 						new ButtonBuilder()
@@ -109,7 +130,7 @@ module.exports.post = fastify => ({
 								action: 'create',
 								target: category.id,
 							}))
-							.setStyle(Secondary)
+							.setStyle(categories.length === 1 ? Primary : Secondary)
 							.setLabel(category.name)
 							.setEmoji(emoji.hasEmoji(category.emoji) ? emoji.get(category.emoji) : { id: category.emoji }),
 					),
@@ -133,7 +154,7 @@ module.exports.post = fastify => ({
 			}
 
 			try {
-				await channel.send({
+				await publish({
 					components: [
 						new ActionRowBuilder()
 							.setComponents(components),
@@ -182,7 +203,7 @@ module.exports.post = fastify => ({
 		}
 
 		logAdminEvent(client, {
-			action: 'create',
+			action: existing ? 'update' : 'create',
 			guildId: guild.id,
 			target: {
 				id: channel.toString(),

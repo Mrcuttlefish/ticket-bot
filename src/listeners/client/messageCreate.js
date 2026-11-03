@@ -15,6 +15,7 @@ const {
 } = require('../../lib/users');
 const ms = require('ms');
 const { compileTagRegex } = require('../../lib/security');
+const { fillTagPlaceholders } = require('../../lib/tags');
 const emoji = require('node-emoji');
 
 module.exports = class extends Listener {
@@ -290,7 +291,16 @@ module.exports = class extends Listener {
 						embeds: [
 							new EmbedBuilder()
 								.setColor(settings.primaryColour)
-								.setDescription(tag.content),
+								.setDescription(fillTagPlaceholders(tag.content, {
+									author: message.author,
+									channel: message.channel,
+									guild: message.guild,
+									ticket: ticket && {
+										createdById: ticket.createdById,
+										number: ticket.number,
+									},
+									user: message.member ?? message.author,
+								})),
 						],
 					});
 				}
