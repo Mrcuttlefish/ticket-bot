@@ -2,6 +2,7 @@
 const { Autocompleter } = require('@eartharoid/dbf');
 const emoji = require('node-emoji');
 const Keyv = require('keyv');
+const TTLMap = require('../lib/ttl-map');
 const ms = require('ms');
 const { isStaff } = require('../lib/users');
 const { includesIgnoreCase } = require('../lib/security');
@@ -16,7 +17,7 @@ module.exports = class TicketCompleter extends Autocompleter {
 			id: 'ticket',
 		});
 
-		this.cache = new Keyv();
+		this.cache = new Keyv({ store: new TTLMap() });
 	}
 
 	async getOptions(value, {

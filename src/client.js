@@ -6,6 +6,7 @@ const {
 const logger = require('./lib/logger');
 const { PrismaClient } = require('@prisma/client');
 const Keyv = require('keyv');
+const TTLMap = require('./lib/ttl-map');
 const I18n = require('@eartharoid/i18n');
 const fs = require('fs');
 const { join } = require('path');
@@ -76,7 +77,7 @@ module.exports = class Client extends FrameworkClient {
 		if (reload) {
 			await this.initAfterLogin();
 		} else {
-			this.keyv = new Keyv();
+			this.keyv = new Keyv({ store: new TTLMap() }); // see lib/ttl-map.js (upstream #659)
 
 			this.tickets = new TicketManager(this);
 

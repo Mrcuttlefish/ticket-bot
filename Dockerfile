@@ -29,11 +29,14 @@ RUN mkdir -p /home/container/user /home/container/logs \
     && chown -R container:container /home/container
 
 USER container
+# PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: Prisma's checksum host sometimes returns 403,
+# which stopped containers from starting (upstream #640)
 ENV USER=container \
 	HOME=/home/container \
 	NODE_ENV=production \
 	HTTP_HOST=0.0.0.0 \
-	DOCKER=true
+	DOCKER=true \
+	PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
 WORKDIR /home/container
 
