@@ -3,3 +3,4 @@ name: CodeQL config
 # test/ deliberately contains catastrophic regular expressions to check that they are rejected
 paths-ignore:
   - test
+  - dashboard/build

@@ -5,7 +5,8 @@ process.env.ORIGIN = process.env.HTTP_INTERNAL || process.env.HTTP_EXTERNAL;
 module.exports = async client => {
 	const fastify = await buildApp(client);
 
-	const { handler } = await import('@discord-tickets/settings/build/handler.js');
+	// the web dashboard, prebuilt from Mrcuttlefish/ticket-portal (see scripts/update-dashboard.sh)
+	const { handler } = await import('../dashboard/build/handler.js');
 
 	// https://stackoverflow.com/questions/72317071/how-to-set-up-fastify-correctly-so-that-sveltekit-works-fine
 	fastify.all('/*', {}, (req, res) => handler(req.raw, res.raw, () => {
