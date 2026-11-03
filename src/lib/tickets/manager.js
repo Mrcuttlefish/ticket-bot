@@ -18,6 +18,7 @@ const emoji = require('node-emoji');
 const ms = require('ms');
 const ExtendedEmbedBuilder = require('../embed');
 const { logTicketEvent } = require('../logging');
+const { increment } = require('../metrics');
 const { isStaff } = require('../users');
 const { getWorkingStatus } = require('./working-hours');
 const {
@@ -756,6 +757,7 @@ module.exports = class TicketManager {
 				}
 			}
 
+			increment('tickets_created_total');
 			logTicketEvent(this.client, {
 				action: 'create',
 				target: {
@@ -1413,6 +1415,7 @@ module.exports = class TicketManager {
 		}
 		if (reason) fieldsArray.push(fields.reason);
 
+		increment('tickets_closed_total');
 		logTicketEvent(this.client, {
 			action: 'close',
 			payload: {
