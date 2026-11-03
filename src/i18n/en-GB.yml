@@ -515,6 +515,17 @@ ticket:
       topic: Topic
     title: ℹ️ Reference
   released: ♻️ {user} has released this ticket.
+  suggestions:
+    buttons:
+      continue: Open a ticket anyway
+      solved: "Solved: {tag}"
+    description: |
+      These might answer your question already.
+      If one does, press its button. If not, you can still open a ticket.
+    solved:
+      description: Glad that helped! No ticket was opened.
+      title: ✅ Problem solved
+    title: 💡 Before you open a ticket
   working_hours:
     holiday:
       description:

@@ -1,4 +1,3 @@
-const ms = require('ms');
 const { logAdminEvent } = require('../../../../../../lib/logging');
 const {
 	ValidationError,
@@ -31,15 +30,7 @@ module.exports.delete = fastify => ({
 		const tag = await client.prisma.tag.delete({ where: { id: tagId } });
 
 		const cacheKey = `cache/guild-tags:${guildId}`;
-		client.keyv.set(cacheKey, await client.prisma.tag.findMany({
-			select: {
-				content: true,
-				id: true,
-				name: true,
-				regex: true,
-			},
-			where: { guildId: guildId },
-		}), ms('1h'));
+		await client.keyv.delete(cacheKey); // getGuildTags reloads (and sorts) them
 
 		logAdminEvent(client, {
 			action: 'delete',
@@ -91,15 +82,7 @@ module.exports.patch = fastify => ({
 		});
 
 		const cacheKey = `cache/guild-tags:${guildId}`;
-		client.keyv.set(cacheKey, await client.prisma.tag.findMany({
-			select: {
-				content: true,
-				id: true,
-				name: true,
-				regex: true,
-			},
-			where: { guildId: guildId },
-		}), ms('1h'));
+		await client.keyv.delete(cacheKey); // getGuildTags reloads (and sorts) them
 
 		logAdminEvent(client, {
 			action: 'update',
