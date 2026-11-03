@@ -1,0 +1,1 @@
+const t=[["login_title",{t:"Log in -  Portal",p:[[9,{v:"username"}]]}],["please_login",{t:"Log in to the Portal to view this page"}],["select_server",{t:"Select a server"}],["select_server_title",{t:" Portal",p:[[0,{v:"username"}]]}],["continue_with_discord",{t:"Continue with Discord"}]],e="tmp",o={json:t,locale_id:e};export{o as default,t as json,e as locale_id};
