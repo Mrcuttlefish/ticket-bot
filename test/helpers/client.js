@@ -25,12 +25,18 @@ const loadLocales = () => {
 };
 let locales;
 
-// a logger where every level (and every `log.level.category`) records but prints nothing
+// a logger where every level (and every `log.level.category`) records but prints nothing,
+// except errors when TEST_LOG is set
 function makeLogger() {
 	const entries = [];
+	const record = (name, args) => {
+		entries.push([name, ...args]);
+		// eslint-disable-next-line no-console
+		if (process.env.TEST_LOG && name.startsWith('error')) console.error(`[${name}]`, ...args);
+	};
 	const level = name => new Proxy((() => {}), {
-		apply: (_, __, args) => entries.push([name, ...args]),
-		get: (_, category) => (...args) => entries.push([`${name}.${String(category)}`, ...args]),
+		apply: (_, __, args) => record(name, args),
+		get: (_, category) => (...args) => record(`${name}.${String(category)}`, args),
 	});
 	return new Proxy({ entries }, { get: (target, name) => (name === 'entries' ? entries : level(name)) });
 }

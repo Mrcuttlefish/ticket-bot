@@ -56,6 +56,7 @@ jobs:
       DB_CONNECTION_URL: ${{ matrix.url }}
       TEST_DB_PROVIDER: ${{ matrix.provider }}
       TEST_DB_URL: ${{ matrix.url }}
+      TEST_LOG: "1" # print errors the bot logs, so failures can be diagnosed
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

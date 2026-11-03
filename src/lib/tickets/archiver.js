@@ -19,9 +19,10 @@ module.exports = class TicketArchiver {
 	 * @param {string} ticketId
 	 * @param {import("discord.js").Message} message
 	 * @param {boolean?} external
+	 * @param {number} [attempt]
 	 * @returns {import("@prisma/client").ArchivedMessage|boolean}
 	 */
-	async saveMessage(ticketId, message, external = false) {
+	async saveMessage(ticketId, message, external = false, attempt = 1) {
 		if (process.env.OVERRIDE_ARCHIVE === 'false') return false;
 
 		if (!message.member) {
@@ -180,6 +181,11 @@ module.exports = class TicketArchiver {
 			queries.splice(roles.size, 0, ...authorQueries); // after the roles, before the message
 			return await this.client.prisma.$transaction(queries);
 		} catch (error) {
+			if (error?.code === 'P2002' && attempt < 3) {
+				// messages sent close together archive the same roles and users at the same time; upserts aren't
+				// atomic (find, then create), so one can fail on the primary key. Trying again updates the row instead.
+				return await this.saveMessage(ticketId, message, external, attempt + 1);
+			}
 			if (error?.code === 'P2003') {
 				// foreign key failure: the ticket no longer exists (e.g. the guild's data was reset or imported
 				// while the channel was still open), so there is nothing to archive the message into (upstream #453)
