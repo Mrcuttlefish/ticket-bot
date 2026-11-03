@@ -49,6 +49,7 @@ function makeMember(guild, {
 	const member = {
 		displayAvatarURL: () => user.displayAvatarURL(),
 		displayName: user.globalName,
+		dms: [],
 		guild,
 		id: user.id,
 		isCommunicationDisabled: () => timedOut,
@@ -57,6 +58,10 @@ function makeMember(guild, {
 		roles: {
 			cache: new Collection(roles.map(id => [id, guild.roles.cache.get(id) ?? makeRole(guild, { id })])),
 			hoist: null,
+		},
+		send: async payload => {
+			member.dms.push(payload);
+			return {};
 		},
 		toString: () => `<@${user.id}>`,
 		user,

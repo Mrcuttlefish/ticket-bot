@@ -526,6 +526,8 @@ ticket:
       description: Glad that helped! No ticket was opened.
       title: ✅ Problem solved
     title: 💡 Before you open a ticket
+  web_reply:
+    author: "{name} (via the web)"
   working_hours:
     holiday:
       description:

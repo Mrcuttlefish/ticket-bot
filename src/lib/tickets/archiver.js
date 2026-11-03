@@ -1,4 +1,5 @@
 const { pools } = require('../threads');
+const { getPortalEvents } = require('./portal');
 
 const { crypto } = pools;
 
@@ -155,8 +156,10 @@ module.exports = class TicketArchiver {
 						attachments: [...message.attachments.values()],
 						components: [...message.components.values()],
 						content: message.content,
+						editedAt: message.editedAt ?? null,
 						embeds: message.embeds.map(embed => ({ ...embed })),
 						reference: message.reference?.messageId ?? null,
+						...(message.viaWeb && { viaWeb: true }), // sent from the portal
 					}),
 				)),
 				createdAt: message.createdAt,
@@ -179,7 +182,12 @@ module.exports = class TicketArchiver {
 			);
 
 			queries.splice(roles.size, 0, ...authorQueries); // after the roles, before the message
-			return await this.client.prisma.$transaction(queries);
+			const result = await this.client.prisma.$transaction(queries);
+			getPortalEvents(this.client).emit('message', {
+				messageId: message.id,
+				ticketId,
+			});
+			return result;
 		} catch (error) {
 			if (error?.code === 'P2002' && attempt < 3) {
 				// messages sent close together archive the same roles and users at the same time; upserts aren't
