@@ -8,6 +8,11 @@ const {
 	sanitize,
 	schemas,
 } = require('../../../../../lib/validation');
+const {
+	maskWebhookSecret,
+	prepareWebhookSecret,
+} = require('../../../../../lib/webhook-secret');
+
 
 module.exports.get = fastify => ({
 	handler: async req => {
@@ -17,7 +22,7 @@ module.exports.get = fastify => ({
 		const settings = await client.prisma.guild.findUnique({ where: { id } }) ??
 			await client.prisma.guild.create({ data: { id } });
 
-		return settings;
+		return maskWebhookSecret(settings);
 	},
 	onRequest: [fastify.authenticate, fastify.isAdmin],
 });
@@ -49,6 +54,14 @@ module.exports.patch = fastify => ({
 		if (Array.isArray(data.autoTag)) {
 			data.autoTag = data.autoTag.filter(channelId => guild.channels.cache.has(channelId));
 		}
+		if (data.webhookSecret) {
+			// required here rather than at the top so the route can be loaded without starting worker threads
+			const { crypto } = require('../../../../../lib/threads').pools;
+			await prepareWebhookSecret(data, text => crypto.queue(w => w.encrypt(text)));
+		} else {
+			await prepareWebhookSecret(data);
+		}
+
 		const original = await client.prisma.guild.findUnique({ where: { id } });
 		const settings = await client.prisma.guild.update({
 			data: data,
@@ -65,8 +78,8 @@ module.exports.patch = fastify => ({
 		logAdminEvent(client, {
 			action: 'update',
 			diff: {
-				original,
-				updated: settings,
+				original: maskWebhookSecret(original),
+				updated: maskWebhookSecret(settings),
 			},
 			guildId: id,
 			target: {
@@ -76,7 +89,7 @@ module.exports.patch = fastify => ({
 			},
 			userId: req.user.id,
 		});
-		return settings;
+		return maskWebhookSecret(settings);
 	},
 	onRequest: [fastify.authenticate, fastify.isAdmin],
 });
