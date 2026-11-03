@@ -105,7 +105,11 @@ module.exports.get = fastify => ({
 			await client.keyv.set(cacheKey, cached, ms('5m'));
 		}
 
-		return cached;
+		return {
+			...cached,
+			// not cached, as ownership can change; the dashboard only offers owner-only actions to the owner
+			ownerId: client.guilds.cache.get(id)?.ownerId ?? null,
+		};
 	},
 	onRequest: [fastify.authenticate, fastify.isAdmin],
 });

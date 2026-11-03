@@ -5,7 +5,7 @@ const {
 } = require('../helpers/client');
 const { createTestAPI } = require('../helpers/api');
 const {
-	makeGuild, makeInteraction, makeMember, makeMessage,
+	makeGuild, makeInteraction, makeMember, makeMessage, makeUser,
 } = require('../helpers/discord');
 
 const ctx = useTestClient();
@@ -29,8 +29,10 @@ function multipart(name, filename, buffer) {
 test('export a server and import it into another (existing data migrates cleanly)', async () => {
 	const { client } = ctx;
 	const { app } = await getAPI();
-	const source = makeGuild(client);
+	const owner = makeUser();
+	const source = makeGuild(client, { ownerId: owner.id });
 	const admin = makeMember(source, { admin: true });
+	makeMember(source, { user: owner });
 	const { category } = await seedCategory(client, source, {
 		autoClose: 3600e3,
 		questions: {
@@ -69,12 +71,25 @@ test('export a server and import it into another (existing data migrates cleanly
 	});
 	await client.tickets.archiver.saveMessage(channel.id, hello);
 
-	const token = (await getAPI()).app.jwt.sign({
+	const sign = id => app.jwt.sign({
 		createdAt: Date.now(),
 		expiresAt: Date.now() + 60e3,
-		id: admin.id,
+		id,
 		scopes: ['applications.commands.permissions.update'],
 	});
+	// exports include who wrote anonymous staff messages, so admins who aren't the owner can't export or import
+	const denied = await app.inject({
+		headers: { authorization: `Bearer ${sign(admin.id)}` },
+		url: `/api/admin/guilds/${source.id}/export`,
+	});
+	assert.equal(denied.statusCode, 403, 'Manage Server isn\'t enough');
+	assert.equal(denied.json().message, 'Only the server\'s owner can do this.');
+	const overview = await app.inject({
+		headers: { authorization: `Bearer ${sign(admin.id)}` },
+		url: `/api/admin/guilds/${source.id}`,
+	});
+	assert.equal(overview.json().ownerId, owner.id, 'the dashboard can tell who the owner is');
+	const token = sign(owner.id);
 	const exported = await app.inject({
 		headers: { authorization: `Bearer ${token}` },
 		url: `/api/admin/guilds/${source.id}/export`,
@@ -85,11 +100,14 @@ test('export a server and import it into another (existing data migrates cleanly
 
 	// import into a different server: first a copy while the source still exists (its tickets are skipped,
 	// as ticket IDs are channel IDs), then a move, where the source's data is gone
-	const target = makeGuild(client);
-	const targetAdmin = makeMember(target, {
-		admin: true,
-		user: admin.user,
+	const target = makeGuild(client, { ownerId: owner.id });
+	const targetAdmin = makeMember(target, { user: owner });
+	const notOwner = await app.inject({
+		headers: { authorization: `Bearer ${sign(admin.id)}` },
+		method: 'POST',
+		url: `/api/admin/guilds/${target.id}/import`,
 	});
+	assert.equal(notOwner.statusCode, 403);
 	const importInto = async guildId => {
 		const upload = multipart('file', 'export.zip', zip);
 		const imported = await app.inject({

@@ -232,5 +232,5 @@ module.exports.get = fastify => ({
 			// Release export lock on request closure or error
 			.then(() => releaseExport(id), () => releaseExport(id));
 	},
-	onRequest: [fastify.authenticate, fastify.isAdmin],
+	onRequest: [fastify.authenticate, fastify.isOwner],
 });
