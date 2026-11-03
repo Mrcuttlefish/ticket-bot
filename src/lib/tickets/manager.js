@@ -24,6 +24,9 @@ const { isStaff } = require('../users');
 const { getWorkingStatus } = require('./working-hours');
 const { buildQuestionInput } = require('./question-input');
 const {
+	buildButtons, buildOpeningMessage, editOpeningButtons,
+} = require('./opening-message');
+const {
 	getMemberLimit, getNumberBase, getPingRoles, pickDiscordCategory, resolveCategorySettings,
 } = require('./options');
 const {
@@ -486,99 +489,55 @@ module.exports = class TicketManager {
 			this.client.keyv.set(statsCacheKey, stats, ms('1h'));
 		}
 
-		const embeds = [
-			new ExtendedEmbedBuilder()
-				.setColor(category.guild.primaryColour)
-				.setAuthor({
-					iconURL: creator.displayAvatarURL(),
-					name: creator.displayName,
-				})
-				// an empty opening message is allowed (upstream #534); the embed keeps the creator and image
-				.setDescription(
-					formatOpeningMessage(category.openingMessage, {
-						...stats,
-						category,
-						creator,
-						number,
-						topic,
-					}).trim() || null,
-				),
-		];
-
-		if (category.image) embeds[0].setImage(category.image);
-
+		let fields = [];
 		if (answers) {
-			embeds.push(
-				new ExtendedEmbedBuilder()
-					.setColor(category.guild.primaryColour)
-					.setFields(
-						category.questions
-							.map(q => ({
-								name: q.label,
-								value: interaction.fields.getTextInputValue(q.id) || getMessage('ticket.answers.no_value'),
-							})),
-					),
-			);
+			fields = category.questions.map(q => ({
+				name: q.label,
+				value: interaction.fields.getTextInputValue(q.id) || getMessage('ticket.answers.no_value'),
+			}));
 		} else if (topic) {
-			embeds.push(
-				new ExtendedEmbedBuilder()
-					.setColor(category.guild.primaryColour)
-					.setFields({
-						name: getMessage('ticket.opening_message.fields.topic'),
-						value: topic,
-					}),
-			);
+			fields = [{
+				name: getMessage('ticket.opening_message.fields.topic'),
+				value: topic,
+			}];
 		}
 
-		if (category.guild.footer) {
-			embeds[embeds.length - 1].setFooter({
-				iconURL: guild.iconURL(),
-				text: category.guild.footer,
-			});
-		}
-
-		const components = new ActionRowBuilder();
-
-		if (topic || answers) {
-			components.addComponents(
-				new ButtonBuilder()
-					.setCustomId(JSON.stringify({ action: 'edit' }))
-					.setStyle(ButtonStyle.Secondary)
-					.setEmoji(getMessage('buttons.edit.emoji'))
-					.setLabel(getMessage('buttons.edit.text')),
-			);
-		}
-
-		if (resolveCategorySettings(category.guild, category).claimButton && category.claiming) {
-			components.addComponents(
-				new ButtonBuilder()
-					.setCustomId(JSON.stringify({ action: 'claim' }))
-					.setStyle(ButtonStyle.Secondary)
-					.setEmoji(getMessage('buttons.claim.emoji'))
-					.setLabel(getMessage('buttons.claim.text')),
-			);
-		}
-
-		if (resolveCategorySettings(category.guild, category).closeButton) {
-			components.addComponents(
-				new ButtonBuilder()
-					.setCustomId(JSON.stringify({ action: 'close' }))
-					.setStyle(ButtonStyle.Danger)
-					.setEmoji(getMessage('buttons.close.emoji'))
-					.setLabel(getMessage('buttons.close.text')),
-			);
-		}
-
+		const categorySettings = resolveCategorySettings(category.guild, category);
 		const pings = getPingRoles(category, id => creator.roles.cache.has(id)).map(r => `<@&${r}>`).join(' ');
 
-		const sent = await channel.send({
-			components: components.components.length >= 1 ? [components] : [],
+		const sent = await channel.send(buildOpeningMessage({
+			author: {
+				avatar: creator.displayAvatarURL(),
+				name: creator.displayName,
+			},
+			buttons: buildButtons({
+				claim: categorySettings.claimButton && category.claiming ? 'claim' : null,
+				close: categorySettings.closeButton,
+				edit: Boolean(topic || answers),
+				getMessage,
+			}),
+			colour: category.guild.primaryColour,
 			content: getMessage('ticket.opening_message.content', {
 				creator: interaction.user.toString(),
 				staff: pings ? pings + ',' : '',
 			}),
-			embeds,
-		});
+			description: formatOpeningMessage(category.openingMessage, {
+				...stats,
+				category,
+				creator,
+				number,
+				topic,
+			}).trim() || null,
+			fields,
+			footer: category.guild.footer
+				? {
+					iconURL: guild.iconURL(),
+					text: category.guild.footer,
+				}
+				: null,
+			image: category.image,
+			v2: category.guild.componentsV2,
+		}));
 
 		sent.pin({ reason: 'Ticket opening message' })
 			.then(() => {
@@ -876,39 +835,13 @@ module.exports = class TicketManager {
 		const openingMessage = await interaction.channel.messages.fetch(ticket.openingMessageId);
 
 		if (openingMessage && openingMessage.components.length !== 0) {
-			const components = new ActionRowBuilder();
-
-			if (ticket.topic || ticket._count.questionAnswers !== 0) {
-				components.addComponents(
-					new ButtonBuilder()
-						.setCustomId(JSON.stringify({ action: 'edit' }))
-						.setStyle(ButtonStyle.Secondary)
-						.setEmoji(getMessage('buttons.edit.emoji'))
-						.setLabel(getMessage('buttons.edit.text')),
-				);
-			}
-
-			if (resolveCategorySettings(ticket.guild, ticket.category).claimButton && ticket.category.claiming) {
-				components.addComponents(
-					new ButtonBuilder()
-						.setCustomId(JSON.stringify({ action: 'unclaim' }))
-						.setStyle(ButtonStyle.Secondary)
-						.setEmoji(getMessage('buttons.unclaim.emoji'))
-						.setLabel(getMessage('buttons.unclaim.text')),
-				);
-			}
-
-			if (resolveCategorySettings(ticket.guild, ticket.category).closeButton) {
-				components.addComponents(
-					new ButtonBuilder()
-						.setCustomId(JSON.stringify({ action: 'close' }))
-						.setStyle(ButtonStyle.Danger)
-						.setEmoji(getMessage('buttons.close.emoji'))
-						.setLabel(getMessage('buttons.close.text')),
-				);
-			}
-
-			await openingMessage.edit({ components: [components] });
+			const categorySettings = resolveCategorySettings(ticket.guild, ticket.category);
+			await editOpeningButtons(openingMessage, buildButtons({
+				claim: categorySettings.claimButton && ticket.category.claiming ? 'unclaim' : null,
+				close: categorySettings.closeButton,
+				edit: Boolean(ticket.topic || ticket._count.questionAnswers !== 0),
+				getMessage,
+			}));
 		}
 
 		await interaction.editReply({
@@ -972,39 +905,13 @@ module.exports = class TicketManager {
 		const openingMessage = await interaction.channel.messages.fetch(ticket.openingMessageId);
 
 		if (openingMessage && openingMessage.components.length !== 0) {
-			const components = new ActionRowBuilder();
-
-			if (ticket.topic || ticket._count.questionAnswers !== 0) {
-				components.addComponents(
-					new ButtonBuilder()
-						.setCustomId(JSON.stringify({ action: 'edit' }))
-						.setStyle(ButtonStyle.Secondary)
-						.setEmoji(getMessage('buttons.edit.emoji'))
-						.setLabel(getMessage('buttons.edit.text')),
-				);
-			}
-
-			if (resolveCategorySettings(ticket.guild, ticket.category).claimButton && ticket.category.claiming) {
-				components.addComponents(
-					new ButtonBuilder()
-						.setCustomId(JSON.stringify({ action: 'claim' }))
-						.setStyle(ButtonStyle.Secondary)
-						.setEmoji(getMessage('buttons.claim.emoji'))
-						.setLabel(getMessage('buttons.claim.text')),
-				);
-			}
-
-			if (resolveCategorySettings(ticket.guild, ticket.category).closeButton) {
-				components.addComponents(
-					new ButtonBuilder()
-						.setCustomId(JSON.stringify({ action: 'close' }))
-						.setStyle(ButtonStyle.Danger)
-						.setEmoji(getMessage('buttons.close.emoji'))
-						.setLabel(getMessage('buttons.close.text')),
-				);
-			}
-
-			await openingMessage.edit({ components: [components] });
+			const categorySettings = resolveCategorySettings(ticket.guild, ticket.category);
+			await editOpeningButtons(openingMessage, buildButtons({
+				claim: categorySettings.claimButton && ticket.category.claiming ? 'claim' : null,
+				close: categorySettings.closeButton,
+				edit: Boolean(ticket.topic || ticket._count.questionAnswers !== 0),
+				getMessage,
+			}));
 		}
 
 		await interaction.editReply({

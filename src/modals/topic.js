@@ -1,7 +1,6 @@
 const { Modal } = require('@eartharoid/dbf');
-const {
-	EmbedBuilder, MessageFlags,
-} = require('discord.js');
+const { MessageFlags } = require('discord.js');
+const { editOpeningDetails } = require('../lib/tickets/opening-message');
 const ExtendedEmbedBuilder = require('../lib/embed');
 const { logTicketEvent } = require('../lib/logging');
 const { pools } = require('../lib/threads');
@@ -53,14 +52,13 @@ module.exports = class TopicModal extends Modal {
 			if (topic && channelTopic !== null) interaction.channel.setTopic(channelTopic);
 
 			const opening = await interaction.channel.messages.fetch(ticket.openingMessageId);
-			if (opening && opening.embeds.length >= 2) {
-				const embeds = [...opening.embeds];
-				embeds[1] = new EmbedBuilder(embeds[1].data)
-					.setFields({
+			if (opening) {
+				await editOpeningDetails(opening, topic
+					? [{
 						name: getMessage('ticket.opening_message.fields.topic'),
 						value: topic,
-					});
-				await opening.edit({ embeds });
+					}]
+					: []);
 			}
 
 			await interaction.editReply({

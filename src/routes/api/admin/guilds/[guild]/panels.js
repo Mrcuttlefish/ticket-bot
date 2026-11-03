@@ -1,17 +1,17 @@
 const {
-	ActionRowBuilder,
 	ButtonBuilder,
 	ButtonStyle: {
 		Primary,
 		Secondary,
 	},
 	ChannelType: { GuildText },
-	EmbedBuilder,
+	MessageFlags,
 	StringSelectMenuBuilder,
 	StringSelectMenuOptionBuilder,
 } = require('discord.js');
 const emoji = require('node-emoji');
 const { logAdminEvent } = require('../../../../../lib/logging');
+const { buildPanel } = require('../../../../../lib/panel');
 
 module.exports.post = fastify => ({
 	handler: async (req, res) => {
@@ -23,6 +23,7 @@ module.exports.post = fastify => ({
 		const settings = await client.prisma.guild.findUnique({
 			select: {
 				categories: true,
+				componentsV2: true,
 				footer: true,
 				locale: true,
 				primaryColour: true,
@@ -84,28 +85,38 @@ module.exports.post = fastify => ({
 				});
 			}
 		}
+		// Discord doesn't let a message go back from layout components to embeds
+		if (existing && !settings.componentsV2 && existing.flags?.has(MessageFlags.IsComponentsV2)) {
+			return res.code(400).send({
+				error: 'Bad Request',
+				message: 'This panel uses the new message layout, which can\'t be changed back. Send a new panel instead.',
+				statusCode: 400,
+			});
+		}
 		const publish = payload => (existing ? existing.edit({
 			components: [],
 			...payload,
 		}) : channel.send(payload));
 
-		const embed = new EmbedBuilder()
-			.setColor(settings.primaryColour);
-
-		if (settings.footer) {
-			embed.setFooter({
-				iconURL: guild.iconURL(),
-				text: settings.footer,
-			});
-		}
-
-		if (data.title) embed.setTitle(data.title);
-		if (data.description) embed.setDescription(data.description);
-		if (data.image) embed.setImage(data.image);
-		if (data.thumbnail) embed.setThumbnail(data.thumbnail);
+		const panel = controls => buildPanel({
+			colour: settings.primaryColour,
+			controls,
+			description: data.description,
+			editing: Boolean(existing),
+			footer: settings.footer
+				? {
+					iconURL: guild.iconURL(),
+					text: settings.footer,
+				}
+				: null,
+			image: data.image,
+			thumbnail: data.thumbnail,
+			title: data.title,
+			v2: settings.componentsV2,
+		});
 
 		if (data.type === 'MESSAGE') {
-			await publish({ embeds: [embed] });
+			await publish(panel([]));
 		} else {
 			const components = [];
 
@@ -154,18 +165,14 @@ module.exports.post = fastify => ({
 			}
 
 			try {
-				await publish({
-					components: [
-						new ActionRowBuilder()
-							.setComponents(components),
-					],
-					embeds: [embed],
-				});
+				await publish(panel(components));
 			} catch (error) {
 				if (!data.channel) await channel.delete('Failed to send panel');
 
 				const human_errors = [];
-				const action_row = error?.rawError?.errors?.components?.['0'];
+				const action_row = settings.componentsV2
+					? error?.rawError?.errors?.components?.['0']?.components?.[String(1 + (data.image ? 1 : 0))]
+					: error?.rawError?.errors?.components?.['0'];
 				const buttons_or_options = {
 					BUTTON: action_row?.components,
 					MENU: action_row?.components?.['0']?.options,

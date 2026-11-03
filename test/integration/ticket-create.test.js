@@ -201,3 +201,41 @@ test('unknown categories get an error', async () => {
 	});
 	assert.match(embedText(interaction.responses[0].data), /category/i);
 });
+
+test('Components V2: the opening message uses layout components, and claiming swaps the button (upstream #655)', async () => {
+	const { MessageFlags } = require('discord.js');
+	const { client } = ctx;
+	const guild = makeGuild(client);
+	const staffRole = makeRole(guild);
+	const { category } = await seedCategory(client, guild, {
+		claiming: true,
+		settings: {
+			claimButton: true,
+			componentsV2: true,
+		},
+		staffRoles: [staffRole.id],
+	});
+	const creator = makeMember(guild);
+	await create(client, creator, category, { topic: 'My order is missing' });
+	const [channel] = guild.created;
+	const sent = channel.sent[0];
+	assert.equal(sent.flags, MessageFlags.IsComponentsV2);
+	assert.equal(sent.embeds, undefined, 'no embeds');
+	assert.equal(sent.content, undefined, 'V2 messages can\'t have content');
+	const json = JSON.stringify(sent.components.map(c => c.toJSON()));
+	assert.match(json, new RegExp(`Hello ${creator}`));
+	assert.match(json, /My order is missing/);
+	assert.match(json, /\{\\"action\\":\\"claim\\"\}/);
+
+	const staff = makeMember(guild, { roles: [staffRole.id] });
+	const interaction = makeInteraction({
+		channel,
+		member: staff,
+	});
+	await client.tickets.claim(interaction);
+	const opening = channel.messages.cache.get(channel.messages.cache.firstKey());
+	const edited = JSON.stringify(opening.components);
+	assert.match(edited, /\{\\"action\\":\\"unclaim\\"\}/, 'the claim button becomes release');
+	assert.doesNotMatch(edited, /\{\\"action\\":\\"claim\\"\}/);
+	assert.match(edited, /My order is missing/, 'the rest of the message is kept');
+});

@@ -267,3 +267,42 @@ test('/status and /metrics', async () => {
 	assert.equal(status.statusCode, 200);
 	assert.equal((await api.app.inject({ url: '/metrics' })).statusCode, 404, 'off without METRICS_TOKEN');
 });
+
+test('panels: Components V2 panels, and V2 panels can\'t be edited back into embeds (upstream #655)', async () => {
+	const { MessageFlags } = require('discord.js');
+	const {
+		admin, category, client, guild, url,
+	} = await server();
+	await client.prisma.guild.update({
+		data: { componentsV2: true },
+		where: { id: guild.id },
+	});
+	const channel = makeTextChannel(guild);
+	let res = await admin('POST', `${url}/panels`, {
+		categories: [category.id],
+		channel: channel.id,
+		description: 'Click below',
+		title: 'Support',
+		type: 'BUTTON',
+	});
+	assert.equal(res.status, 200, res.text);
+	assert.equal(channel.sent[0].flags, MessageFlags.IsComponentsV2);
+	const json = JSON.stringify(channel.sent[0].components[0].toJSON());
+	assert.match(json, /## Support/);
+	assert.match(json, /"action\\":\\"create\\"/);
+
+	const panel = [...channel.messages.cache.values()][0];
+	await client.prisma.guild.update({
+		data: { componentsV2: false },
+		where: { id: guild.id },
+	});
+	res = await admin('POST', `${url}/panels`, {
+		categories: [category.id],
+		channel: channel.id,
+		message: panel.id,
+		title: 'Support',
+		type: 'BUTTON',
+	});
+	assert.equal(res.status, 400);
+	assert.match(res.body.message, /can't be changed back/);
+});

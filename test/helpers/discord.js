@@ -6,6 +6,7 @@
 const {
 	ChannelType,
 	Collection,
+	MessageFlagsBitField,
 	PermissionsBitField,
 } = require('discord.js');
 
@@ -94,6 +95,7 @@ function makeMessage(channel, {
 			return message;
 		},
 		embeds: payload.embeds ?? [],
+		flags: new MessageFlagsBitField(payload.flags ?? 0),
 		guild: channel.guild,
 		id,
 		member: channel.guild.members.cache.get(author.id) ?? null,
