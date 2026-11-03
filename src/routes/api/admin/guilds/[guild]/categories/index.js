@@ -6,10 +6,8 @@ const {
 const emoji = require('node-emoji');
 const { ChannelType: { GuildCategory } } = require('discord.js');
 const ms = require('ms');
-const {
-	ValidationError,
-	sanitizeCategory,
-} = require('../../../../../../lib/validation');
+const { sanitizeCategory } = require('../../../../../../lib/validation');
+const { checkCategoryRefs } = require('../../../../../../lib/category-refs');
 const {
 	getAverageTimes, getAverageRating,
 } = require('../../../../../../lib/stats');
@@ -90,18 +88,8 @@ module.exports.post = fastify => ({
 		data.staffRoles ??= [];
 		const allow = ['ViewChannel', 'ReadMessageHistory', 'SendMessages', 'EmbedLinks', 'AttachFiles'];
 
-		// drop roles that aren't in this server (e.g. deleted roles, or roles from another server)
-		for (const field of ['staffRoles', 'pingRoles', 'requiredRoles']) {
-			if (data[field]) data[field] = data[field].filter(id => guild.roles.cache.has(id));
-		}
-
-		if (data.discordCategory) {
-			const channel = client.channels.cache.get(data.discordCategory);
-			// unknown channels are tolerated (it may have been deleted), but not channels from another server
-			if (channel && (channel.guildId !== guild.id || channel.type !== GuildCategory)) {
-				throw new ValidationError('discordCategory', 'must be a category channel in this server');
-			}
-		}
+		// drop roles that aren't in this server and reject Discord categories from other servers
+		checkCategoryRefs(guild, data, id => client.channels.cache.get(id));
 
 		if (!data.discordCategory) {
 			let name = data.name;

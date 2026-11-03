@@ -95,3 +95,44 @@ test('validation errors become 400 responses', () => {
 	const error = new ValidationError('x', 'bad');
 	assert.equal(error.statusCode, 400);
 });
+
+test('new ticket options are validated', () => {
+	const settings = sanitize({
+		closeRequests: false,
+		ghostPing: 'true',
+		holidays: ['2026-12-25'],
+		ticketNumberOffset: '1000',
+	}, schemas.guildSettings);
+	assert.deepEqual(settings, {
+		closeRequests: false,
+		ghostPing: true,
+		holidays: ['2026-12-25'],
+		ticketNumberOffset: 1000,
+	});
+	assert.throws(() => sanitize({ holidays: ['25/12/2026'] }, schemas.guildSettings), ValidationError);
+	assert.throws(() => sanitize({ ticketNumberOffset: -1 }, schemas.guildSettings), ValidationError);
+
+	const { data } = sanitizeCategory({
+		fallbackCategories: ['123456789012345678'],
+		pingRoleRules: [{
+			extra: 'dropped',
+			ping: ['123456789012345679'],
+			roles: ['123456789012345680'],
+		}],
+		roleLimits: [{
+			limit: '3',
+			role: '123456789012345681',
+		}],
+	});
+	assert.deepEqual(data.pingRoleRules, [{
+		ping: ['123456789012345679'],
+		roles: ['123456789012345680'],
+	}]);
+	assert.deepEqual(data.roleLimits, [{
+		limit: 3,
+		role: '123456789012345681',
+	}]);
+	assert.throws(() => sanitizeCategory({ roleLimits: [{ limit: 3 }] }), ValidationError);
+	assert.throws(() => sanitizeCategory({ pingRoleRules: [{ ping: 'x' }] }), ValidationError);
+	assert.throws(() => sanitizeCategory({ fallbackCategories: ['not-an-id'] }), ValidationError);
+});

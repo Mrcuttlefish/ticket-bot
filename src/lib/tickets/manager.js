@@ -5,6 +5,7 @@ const {
 	ActionRowBuilder,
 	ButtonBuilder,
 	ButtonStyle,
+	ChannelType,
 	inlineCode,
 	ModalBuilder,
 	StringSelectMenuBuilder,
@@ -19,6 +20,9 @@ const ExtendedEmbedBuilder = require('../embed');
 const { logTicketEvent } = require('../logging');
 const { isStaff } = require('../users');
 const { getWorkingStatus } = require('./working-hours');
+const {
+	getMemberLimit, getNumberBase, getPingRoles, pickDiscordCategory,
+} = require('./options');
 const {
 	formatChannelName, formatChannelTopic, formatOpeningMessage,
 } = require('./placeholders');
@@ -138,15 +142,29 @@ module.exports = class TicketManager {
 		return await this.client.keyv.get(cacheKey);
 	}
 
-	async getNextNumber(guildId) {
+	/**
+	 * @param {import("discord.js").Guild} guild
+	 * @param {object} category
+	 * @returns {string | null} the ID of a Discord category with space for another channel
+	 */
+	pickDiscordCategory(guild, category) {
+		return pickDiscordCategory(category, id => {
+			const channel = guild.channels.cache.get(id);
+			if (!channel || channel.type !== ChannelType.GuildCategory) return null;
+			return channel.children.cache.size;
+		});
+	}
+
+	async getNextNumber(guildId, offset = 0) {
 		if (this.$numbers[guildId] === undefined) {
 			const { _max: { number: max } } = await this.client.prisma.ticket.aggregate({
 				_max: { number: true },
 				where: { guildId },
 			});
-			this.client.tickets.$numbers[guildId] = max ?? 0;
+			this.$numbers[guildId] = max ?? 0;
 		}
-		this.$numbers[guildId] += 1;
+		// the offset is read every time so changing the setting takes effect without a restart
+		this.$numbers[guildId] = getNumberBase(this.$numbers[guildId], offset) + 1;
 		return this.$numbers[guildId];
 	}
 
@@ -241,14 +259,14 @@ module.exports = class TicketManager {
 			if (missing) return await sendError('missing_roles');
 		}
 
-		const discordCategory = guild.channels.cache.get(category.discordCategory);
-		if (discordCategory.children.cache.size === 50) return await sendError('category_full');
+		// the main Discord category, or the first fallback category that isn't full (upstream #472)
+		if (!this.pickDiscordCategory(guild, category)) return await sendError('category_full');
 
 		const totalCount = await this.getTotalCount(category.id);
 		if (totalCount >= category.totalLimit) return await sendError('category_full');
 
 		const memberCount = await this.getMemberCount(category.id, interaction.user.id);
-		if (memberCount >= category.memberLimit) {
+		if (memberCount >= getMemberLimit(category, id => member.roles.cache.has(id))) {
 			return await interaction.reply({
 				embeds: [
 					new ExtendedEmbedBuilder({
@@ -402,7 +420,9 @@ module.exports = class TicketManager {
 		const guild = this.client.guilds.cache.get(category.guild.id);
 		const getMessage = this.client.i18n.getLocale(category.guild.locale);
 		const creator = await guild.members.fetch(interaction.user.id);
-		const number = await this.getNextNumber(category.guild.id);
+		const number = await this.getNextNumber(category.guild.id, category.guild.ticketNumberOffset);
+		const parent = this.pickDiscordCategory(guild, category);
+		if (!parent) throw new Error(`Every Discord category for category ${category.id} is full`);
 		const channelName = formatChannelName(category.channelName, {
 			displayName: creator.displayName,
 			number,
@@ -412,7 +432,7 @@ module.exports = class TicketManager {
 		/** @type {import("discord.js").TextChannel} */
 		const channel = await guild.channels.create({
 			name: channelName,
-			parent: category.discordCategory,
+			parent,
 			permissionOverwrites: [
 				{
 					deny: ['ViewChannel'],
@@ -549,7 +569,7 @@ module.exports = class TicketManager {
 			);
 		}
 
-		const pings = category.pingRoles.map(r => `<@&${r}>`).join(' ');
+		const pings = getPingRoles(category, id => creator.roles.cache.has(id)).map(r => `<@&${r}>`).join(' ');
 
 		const sent = await channel.send({
 			components: components.components.length >= 1 ? [components] : [],
@@ -765,11 +785,11 @@ module.exports = class TicketManager {
 		}
 
 		try {
-			const status = getWorkingStatus(category.guild.workingHours);
+			const status = getWorkingStatus(category.guild.workingHours, undefined, category.guild.holidays);
 			const working = status.working;
 
 			if (!working && status.timestamp) {
-				const key = status.startsToday ? 'today' : 'next';
+				const key = status.holiday ? 'holiday' : status.startsToday ? 'today' : 'next';
 				channel.send({
 					embeds: [
 						new ExtendedEmbedBuilder()
@@ -1075,13 +1095,15 @@ module.exports = class TicketManager {
 		const reason = interaction.options?.getString('reason', false) || null; // ?. because it could be a button interaction
 
 		if (ticket.createdById !== interaction.user.id && !staff) {
-			return await interaction.editReply({
+			// the interaction hasn't been deferred yet, so editReply would throw
+			return await interaction.reply({
 				embeds: [
 					new ExtendedEmbedBuilder()
 						.setColor(ticket.guild.errorColour)
 						.setTitle(getMessage('ticket.close.forbidden.title'))
 						.setDescription(getMessage('ticket.close.forbidden.description')),
 				],
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 
@@ -1122,6 +1144,15 @@ module.exports = class TicketManager {
 		// interaction could be command, button. or modal
 		const ticket = await this.getTicket(interaction.channel.id);
 		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
+
+		// close requests can be turned off, so the creator or staff close the ticket straight away (upstream #406)
+		if (ticket.guild.closeRequests === false) {
+			return await this.acceptClose(interaction, {
+				closedBy: interaction.user.id,
+				reason,
+			});
+		}
+
 		const staff = interaction.user.id !== ticket.createdById && await isStaff(interaction.guild, interaction.user.id);
 		const closeButtonId = {
 			action: 'close',
@@ -1188,8 +1219,9 @@ module.exports = class TicketManager {
 	 * @param {import("discord.js").ChatInputCommandInteraction
 	 * | import("discord.js").ButtonInteraction
 	 * | import("discord.js").ModalSubmitInteraction} interaction
+	 * @param {{ closedBy?: string, reason?: string }} [options] used instead of the close request's details
 	 */
-	async acceptClose(interaction) {
+	async acceptClose(interaction, options) {
 		const ticket = await this.getTicket(interaction.channel.id);
 		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
 		await interaction.editReply({
@@ -1204,7 +1236,7 @@ module.exports = class TicketManager {
 			],
 		});
 		await new Promise(resolve => setTimeout(resolve, 3e3));
-		await this.finallyClose(interaction.channel.id, this.$stale.get(interaction.channel.id) || {});
+		await this.finallyClose(interaction.channel.id, options ?? this.$stale.get(interaction.channel.id) ?? {});
 	}
 
 	/**

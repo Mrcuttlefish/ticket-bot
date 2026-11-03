@@ -7,6 +7,7 @@ const {
 	MessageFlags,
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('../../lib/embed');
+const { isStaff } = require('../../lib/users');
 const { pools } = require('../../lib/threads');
 
 const { crypto } = pools;
@@ -34,7 +35,13 @@ module.exports = class TopicSlashCommand extends SlashCommand {
 		const ticket = await client.prisma.ticket.findUnique({
 			select: {
 				category: { select: { name: true } },
-				guild: { select: { locale: true } },
+				createdById: true,
+				guild: {
+					select: {
+						errorColour: true,
+						locale: true,
+					},
+				},
 				questionAnswers: { include: { question: true } },
 				topic: true,
 			},
@@ -59,6 +66,19 @@ module.exports = class TopicSlashCommand extends SlashCommand {
 		}
 
 		const getMessage = client.i18n.getLocale(ticket.guild.locale);
+
+		// members who were added to the ticket can't change its topic (upstream #508)
+		if (ticket.createdById !== interaction.user.id && !(await isStaff(interaction.guild, interaction.user.id))) {
+			return await interaction.reply({
+				embeds: [
+					new ExtendedEmbedBuilder()
+						.setColor(ticket.guild.errorColour)
+						.setTitle(getMessage('misc.not_creator.title'))
+						.setDescription(getMessage('misc.not_creator.description')),
+				],
+				flags: MessageFlags.Ephemeral,
+			});
+		}
 
 		const field = new TextInputBuilder()
 			.setCustomId('topic')

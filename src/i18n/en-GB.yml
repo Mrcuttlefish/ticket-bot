@@ -403,6 +403,9 @@ misc:
       No ticket categories have been configured.
       Configure your server at {url}.
     title: ❌ There are no ticket categories
+  not_creator:
+    description: Only the person who created this ticket can do that.
+    title: ❌ This isn't your ticket
   not_ticket:
     description: You can only use this command in tickets.
     title: ❌ This isn't a ticket channel
@@ -511,6 +514,11 @@ ticket:
     title: ℹ️ Reference
   released: ♻️ {user} has released this ticket.
   working_hours:
+    holiday:
+      description:
+        We're not working today. We'll be back at <t:{timestamp}:F>
+        (<t:{timestamp}:R>), although you may receive a response before then.
+      title: 🏖️ We're on holiday
     next:
       description:
         We'll be back at <t:{timestamp}:F> (<t:{timestamp}:R>), although

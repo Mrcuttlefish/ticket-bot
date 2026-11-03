@@ -1,4 +1,5 @@
 const { isStaff } = require('./users');
+const { getPingRoles } = require('./tickets/options');
 const {
 	ActionRowBuilder,
 	ButtonBuilder,
@@ -79,8 +80,12 @@ module.exports = async function handleStaleTickets(client, staleInterval) {
 					if (messages.size > 0) {
 						const lastMessage =  messages.first();
 						const staff = await isStaff(channel.guild, lastMessage.author.id);
-						if (staff) ping = `<@${ticket.createdById}>`;
-						else ping = ticket.category.pingRoles.map(r => `<@&${r}>`).join(' ');
+						if (staff) {
+							ping = `<@${ticket.createdById}>`;
+						} else {
+							const creator = channel.guild.members.cache.get(ticket.createdById);
+							ping = getPingRoles(ticket.category, id => Boolean(creator?.roles.cache.has(id))).map(r => `<@&${r}>`).join(' ');
+						}
 					}
 
 					const sent = await channel.send({
