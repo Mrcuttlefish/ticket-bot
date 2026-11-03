@@ -1,8 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { ChannelType } = require('discord.js');
-const { checkCategoryRefs } = require('../src/lib/category-refs');
-const { ValidationError } = require('../src/lib/validation');
+const { checkCategoryRefs } = require('../../src/lib/category-refs');
+const { ValidationError } = require('../../src/lib/validation');
 
 const guild = {
 	id: 'g1',

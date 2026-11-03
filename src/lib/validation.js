@@ -67,6 +67,7 @@ const types = {
  * @typedef {object} FieldSpec
  * @property {keyof types | ((value: any, field: string) => any)} type
  * @property {boolean} [nullable]
+ * @property {*} [nullValue] stored instead of null
  * @property {object} [options]
  */
 
@@ -87,7 +88,7 @@ function sanitize(body, schema) {
 		if (value === undefined) continue;
 		if (value === null || (spec.nullable && value === '')) {
 			if (!spec.nullable) throw new ValidationError(field, 'must not be empty');
-			out[field] = null;
+			out[field] = spec.nullValue ?? null;
 			continue;
 		}
 		const check = typeof spec.type === 'function' ? spec.type : types[spec.type];
@@ -156,6 +157,8 @@ const guildSettings = {
 	archive: { type: 'boolean' },
 	autoClose: {
 		nullable: true,
+		// the column isn't nullable; 0 turns auto-close off (null used to cause a database error)
+		nullValue: 0,
 		options: { max: MAX_DURATION },
 		type: 'int',
 	},

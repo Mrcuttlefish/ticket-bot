@@ -5,7 +5,7 @@ const {
 	formatMetrics,
 	increment,
 	isAuthorised,
-} = require('../src/lib/metrics');
+} = require('../../src/lib/metrics');
 
 test('formats Prometheus text', () => {
 	const text = formatMetrics([
@@ -57,7 +57,7 @@ test('metrics need the bearer token', () => {
 });
 
 test('/metrics route is off by default and needs the token', async () => {
-	const route = require('../src/routes/metrics').get();
+	const route = require('../../src/routes/metrics').get();
 	const client = {
 		guilds: { cache: new Map([['1', {}]]) },
 		keyv: {

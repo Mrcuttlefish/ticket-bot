@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   test:
+    name: lint, unit and SQLite tests with coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,5 +18,66 @@ jobs:
         with:
           node-version: 22
       - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate --schema db/sqlite/schema.prisma
       - run: npx eslint src scripts test
-      - run: npm test
+      # fails if line, branch or function coverage of the files the tests load drops below the thresholds
+      - run: npm run test:coverage
+
+  databases:
+    name: migrations and integration tests on ${{ matrix.provider }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - provider: postgresql
+            url: postgresql://postgres:postgres@localhost:5432/tickets
+          - provider: mysql
+            url: mysql://root:root@127.0.0.1:3306/tickets
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: tickets
+          POSTGRES_PASSWORD: postgres
+        ports: [ "5432:5432" ]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: tickets
+          MYSQL_ROOT_PASSWORD: root
+        ports: [ "3306:3306" ]
+        options: >-
+          --health-cmd "mysqladmin ping -proot" --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      DB_PROVIDER: ${{ matrix.provider }}
+      DB_CONNECTION_URL: ${{ matrix.url }}
+      TEST_DB_PROVIDER: ${{ matrix.provider }}
+      TEST_DB_URL: ${{ matrix.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npx prisma generate --schema db/${{ matrix.provider }}/schema.prisma
+      # every migration applies to an empty database and matches the schema
+      - run: npx prisma migrate deploy --schema db/${{ matrix.provider }}/schema.prisma
+      - run: npx prisma migrate diff --from-url "$DB_CONNECTION_URL" --to-schema-datamodel db/${{ matrix.provider }}/schema.prisma --exit-code
+      - run: npm run test:integration
+
+  sqlite-migrations:
+    name: SQLite migrations
+    runs-on: ubuntu-latest
+    env:
+      DB_CONNECTION_URL: file:/tmp/tickets.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npx prisma migrate deploy --schema db/sqlite/schema.prisma
+      - run: npx prisma migrate diff --from-url "$DB_CONNECTION_URL" --to-schema-datamodel db/sqlite/schema.prisma --exit-code

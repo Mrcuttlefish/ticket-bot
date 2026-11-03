@@ -22,6 +22,7 @@ const { increment } = require('../metrics');
 const { sendTicketWebhook } = require('./webhook-events');
 const { isStaff } = require('../users');
 const { getWorkingStatus } = require('./working-hours');
+const { buildQuestionInput } = require('./question-input');
 const {
 	getMemberLimit, getNumberBase, getPingRoles, pickDiscordCategory, resolveCategorySettings,
 } = require('./options');
@@ -58,6 +59,8 @@ module.exports = class TicketManager {
 		this.archiver = new TicketArchiver(client);
 		this.$count = { categories: {} };
 		this.$numbers = {};
+		// how long the "closed" message is shown before the channel is deleted
+		this.closeDelay = 3e3;
 		this.$stale = new Collection();
 	}
 
@@ -316,16 +319,7 @@ module.exports = class TicketManager {
 							.filter(q => q.type === 'TEXT') // TODO: remove this when modals support select menus
 							.map(q => {
 								if (q.type === 'TEXT') {
-									const field = new TextInputBuilder()
-										.setCustomId(q.id)
-										.setLabel(q.label)
-										.setStyle(q.style)
-										.setMaxLength(Math.min(q.maxLength, 1000))
-										.setMinLength(q.minLength)
-										.setPlaceholder(q.placeholder)
-										.setRequired(q.required);
-									if (q.value) field.setValue(q.value);
-									return new ActionRowBuilder().setComponents(field);
+									return new ActionRowBuilder().setComponents(buildQuestionInput(q));
 								} else if (q.type === 'MENU') {
 									return new ActionRowBuilder()
 										.setComponents(
@@ -1137,7 +1131,7 @@ module.exports = class TicketManager {
 			return this.finallyClose(ticket.id, { reason });
 		}
 
-		this.requestClose(interaction, reason);
+		return await this.requestClose(interaction, reason);
 	}
 
 	/**
@@ -1242,7 +1236,7 @@ module.exports = class TicketManager {
 					.setDescription(getMessage('ticket.close.closed.description')),
 			],
 		});
-		await new Promise(resolve => setTimeout(resolve, 3e3));
+		await new Promise(resolve => setTimeout(resolve, this.closeDelay));
 		await this.finallyClose(interaction.channel.id, options ?? this.$stale.get(interaction.channel.id) ?? {});
 	}
 
@@ -1306,7 +1300,8 @@ module.exports = class TicketManager {
 
 		if (channel?.deletable) {
 			const member = closedBy ? channel.guild.members.cache.get(closedBy) : null;
-			await channel.delete('Ticket closed' + (member ? ` by ${member.displayName}` : '') + reason ? `: ${reason}` : '');
+			// the parentheses matter: without them the audit log reason was always ": <reason>" (or ": null")
+			await channel.delete('Ticket closed' + (member ? ` by ${member.displayName}` : '') + (reason ? `: ${reason}` : ''));
 		}
 
 		const components = [];

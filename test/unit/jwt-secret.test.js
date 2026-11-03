@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
 	API_KEY_LIFETIME, getJWTSecret, isTokenCurrent,
-} = require('../src/lib/jwt-secret');
+} = require('../../src/lib/jwt-secret');
 
 const KEY = 'a'.repeat(48);
 

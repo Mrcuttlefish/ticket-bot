@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
 	getMiddlewares, runMiddlewares,
-} = require('../src/lib/prisma');
+} = require('../../src/lib/prisma');
 
 test('middlewares run in order around the query, like $use did', async () => {
 	const calls = [];

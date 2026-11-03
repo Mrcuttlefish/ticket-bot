@@ -65,16 +65,39 @@ async function reusable(name) {
 	return thread;
 };
 
-const pools = {
-	crypto: reusablePool(.5, 'crypto'),
-	export: reusablePool(.33, 'export'),
-	import: reusablePool(.33, 'import'),
-	stats: reusablePool(.25, 'stats'),
-	transcript: reusablePool(.5, 'transcript'),
+const poolSizes = {
+	crypto: .5,
+	export: .33,
+	import: .33,
+	stats: .25,
+	transcript: .5,
 };
+const created = {};
+
+// pools are created when they're first used, so loading a module doesn't start threads it may never need
+// (this also stops tests from hanging on idle workers)
+const pools = {};
+for (const [name, size] of Object.entries(poolSizes)) {
+	Object.defineProperty(pools, name, {
+		enumerable: true,
+		get: () => (created[name] ??= reusablePool(size, name)),
+	});
+}
+
+/**
+ * Terminate every pool that has been created (used by tests and on shutdown)
+ * @returns {Promise<void>}
+ */
+async function terminatePools() {
+	await Promise.all(Object.keys(created).map(async name => {
+		await created[name].terminate(true);
+		delete created[name];
+	}));
+}
 
 module.exports = {
 	pools,
+	terminatePools,
 	quick,
 	quickPool,
 	reusable,

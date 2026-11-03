@@ -155,7 +155,15 @@ async function logTicketEvent(client, {
 	if (!ticket) return;
 	/** @type {import("discord.js").Guild} */
 	const guild = client.guilds.cache.get(ticket.guild.id);
-	const member = await guild.members.fetch(userId);
+	// the user may have left the server (e.g. staff who closed a ticket); that mustn't stop the event being logged
+	const member = await guild?.members.fetch(userId).catch(() => null) ?? {
+		displayAvatarURL: () => null,
+		displayName: userId,
+		user: {
+			id: userId,
+			tag: userId,
+		},
+	};
 	client.log.info.tickets(`${member.user.tag} ${client.i18n.getMessage('en-GB', `log.ticket.verb.${action}`)} ticket ${target.id}`);
 	if (!ticket.guild.logChannel) return;
 	const channel = guildChannel(client, ticket.guild.id, ticket.guild.logChannel);

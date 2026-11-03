@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const spacetime = require('spacetime');
-const { getWorkingStatus } = require('../src/lib/tickets/working-hours');
+const { getWorkingStatus } = require('../../src/lib/tickets/working-hours');
 
 const NINE_TO_FIVE = ['09:00', '17:00'];
 const OFF = ['00:00', '00:00'];

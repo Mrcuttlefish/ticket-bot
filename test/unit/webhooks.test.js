@@ -7,7 +7,7 @@ const {
 	isPublicAddress,
 	safeLookup,
 	sendWebhook,
-} = require('../src/lib/webhooks');
+} = require('../../src/lib/webhooks');
 
 const withEnv = async (value, fn) => {
 	const previous = process.env.WEBHOOKS_ALLOW_PRIVATE;
@@ -105,7 +105,7 @@ test('sending to a private address is refused', () => withEnv(undefined, async (
 test('the webhook secret is write-only', async () => {
 	const {
 		MASK, maskWebhookSecret, prepareWebhookSecret,
-	} = require('../src/lib/webhook-secret');
+	} = require('../../src/lib/webhook-secret');
 	assert.deepEqual(maskWebhookSecret({
 		id: '1',
 		webhookSecret: 'encrypted',
@@ -120,7 +120,7 @@ test('the webhook secret is write-only', async () => {
 });
 
 test('webhook payloads include decrypted answers and close details', () => {
-	const { buildPayload } = require('../src/lib/tickets/webhook-events');
+	const { buildPayload } = require('../../src/lib/tickets/webhook-events');
 	const ticket = {
 		category: {
 			id: 3,

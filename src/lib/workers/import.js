@@ -3,7 +3,7 @@ const { encrypt } = require('../crypto');
 const { importTicket } = require('../import');
 
 expose({
-	importTicket(stringified, guildId, categoryMap) {
-		return importTicket(JSON.parse(stringified), guildId, categoryMap, encrypt);
+	importTicket(stringified, guildId, categoryMap, questionMap) {
+		return importTicket(JSON.parse(stringified), guildId, categoryMap, encrypt, questionMap);
 	},
 });

@@ -60,9 +60,10 @@ const TICKET_FIELDS = [
  * @param {string} guildId the guild being imported into
  * @param {Map<number, number>} categoryMap old category ID -> new category ID
  * @param {(text: string) => string} encrypt
+ * @param {Map<string, string>} [questionMap] old question ID -> new question ID; answers to unknown questions are dropped
  * @returns {[object, object[]]} the ticket create payload and its archived messages
  */
-function importTicket(raw, guildId, categoryMap, encrypt) {
+function importTicket(raw, guildId, categoryMap, encrypt, questionMap) {
 	const id = snowflake(raw.id, 'ticket id');
 	const ticket = pick(raw, TICKET_FIELDS);
 	ticket.id = id;
@@ -113,11 +114,13 @@ function importTicket(raw, guildId, categoryMap, encrypt) {
 		ticket.feedback = { create: feedback };
 	}
 
-	if (raw.questionAnswers?.length) {
+	const answers = (raw.questionAnswers ?? []).filter(a => !questionMap || questionMap.has(a.questionId));
+	if (answers.length) {
 		// fixes upstream #651: exported answers include `ticketId` and `id`, which nested creates reject
 		ticket.questionAnswers = {
-			create: raw.questionAnswers.map(a => {
+			create: answers.map(a => {
 				const answer = pick(a, ['createdAt', 'questionId', 'userId', 'value']);
+				if (questionMap) answer.questionId = questionMap.get(a.questionId);
 				answer.userId = snowflake(answer.userId, 'answer userId');
 				answer.value &&= encrypt(answer.value);
 				return answer;

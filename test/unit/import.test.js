@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { importTicket } = require('../src/lib/import');
+const { importTicket } = require('../../src/lib/import');
 
 const encrypt = s => `enc(${s})`;
 const GUILD = '100000000000000001';

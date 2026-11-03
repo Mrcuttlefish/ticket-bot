@@ -4,7 +4,7 @@ const {
 	formatChannelName,
 	formatChannelTopic,
 	formatOpeningMessage,
-} = require('../src/lib/tickets/placeholders');
+} = require('../../src/lib/tickets/placeholders');
 
 test('channel names support zero-padded numbers (upstream #543)', () => {
 	const values = {
