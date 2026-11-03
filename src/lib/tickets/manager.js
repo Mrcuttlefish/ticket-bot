@@ -613,8 +613,14 @@ module.exports = class TicketManager {
 			}
 		} else if (referencesTicketId) {
 			// TODO: add portal url
-			const ticket = await this.client.prisma.ticket.findUnique({ where: { id: referencesTicketId } });
-			if (!ticket) {
+			const ticket = await this.client.prisma.ticket.findUnique({ where: { id: String(referencesTicketId) } });
+			// only reference tickets from this guild that the user created (or can see as staff),
+			// otherwise any user could leak the topic of any ticket into a new one
+			if (
+				!ticket ||
+				ticket.guildId !== category.guild.id ||
+				(ticket.createdById !== interaction.user.id && !(await isStaff(guild, interaction.user.id)))
+			) {
 				referencesTicketId = null;
 			} else {
 				const embed = new ExtendedEmbedBuilder({

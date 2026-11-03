@@ -7,6 +7,10 @@ const emoji = require('node-emoji');
 const { ChannelType: { GuildCategory } } = require('discord.js');
 const ms = require('ms');
 const {
+	ValidationError,
+	sanitizeCategory,
+} = require('../../../../../../lib/validation');
+const {
 	getAverageTimes, getAverageRating,
 } = require('../../../../../../lib/stats');
 
@@ -78,8 +82,26 @@ module.exports.post = fastify => ({
 
 		const user = await client.users.fetch(req.user.id);
 		const guild = client.guilds.cache.get(req.params.guild);
-		const data = req.body;
+		// only known fields; prevents nested relation writes and foreign key changes
+		const {
+			data,
+			questions,
+		} = sanitizeCategory(req.body);
+		data.staffRoles ??= [];
 		const allow = ['ViewChannel', 'ReadMessageHistory', 'SendMessages', 'EmbedLinks', 'AttachFiles'];
+
+		// drop roles that aren't in this server (e.g. deleted roles, or roles from another server)
+		for (const field of ['staffRoles', 'pingRoles', 'requiredRoles']) {
+			if (data[field]) data[field] = data[field].filter(id => guild.roles.cache.has(id));
+		}
+
+		if (data.discordCategory) {
+			const channel = client.channels.cache.get(data.discordCategory);
+			// unknown channels are tolerated (it may have been deleted), but not channels from another server
+			if (channel && (channel.guildId !== guild.id || channel.type !== GuildCategory)) {
+				throw new ValidationError('discordCategory', 'must be a category channel in this server');
+			}
+		}
 
 		if (!data.discordCategory) {
 			let name = data.name;
@@ -115,7 +137,14 @@ module.exports.post = fastify => ({
 			data: {
 				...data,
 				guild: { connect: { id: guild.id } },
-				questions: { createMany: { data: data.questions ?? [] } },
+				questions: {
+					createMany: {
+						data: (questions ?? []).map(q => {
+							delete q.id; // let the database generate IDs
+							return q;
+						}),
+					},
+				},
 			},
 		});
 

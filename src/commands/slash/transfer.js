@@ -4,6 +4,7 @@ const {
 	EmbedBuilder,
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('../../lib/embed');
+const { isStaff } = require('../../lib/users');
 const { pools } = require('../../lib/threads');
 
 const { crypto } = pools;
@@ -69,6 +70,35 @@ module.exports = class TransferSlashCommand extends SlashCommand {
 		}
 
 		const from = ticket.createdById;
+
+		// only staff or the ticket's current owner can transfer it
+		if (from !== interaction.user.id && !(await isStaff(interaction.guild, interaction.user.id))) {
+			return await interaction.editReply({
+				embeds: [
+					new ExtendedEmbedBuilder({
+						iconURL: interaction.guild.iconURL(),
+						text: ticket.guild.footer,
+					})
+						.setColor(ticket.guild.errorColour)
+						.setTitle(client.i18n.getMessage(ticket.guild.locale, 'commands.slash.transfer.not_staff.title'))
+						.setDescription(client.i18n.getMessage(ticket.guild.locale, 'commands.slash.transfer.not_staff.description')),
+				],
+			});
+		}
+
+		if (!member || member.user.bot) {
+			return await interaction.editReply({
+				embeds: [
+					new ExtendedEmbedBuilder({
+						iconURL: interaction.guild.iconURL(),
+						text: ticket.guild.footer,
+					})
+						.setColor(ticket.guild.errorColour)
+						.setTitle(client.i18n.getMessage(ticket.guild.locale, 'commands.slash.transfer.invalid_member.title'))
+						.setDescription(client.i18n.getMessage(ticket.guild.locale, 'commands.slash.transfer.invalid_member.description')),
+				],
+			});
+		}
 
 		const channelName = ticket.category.channelName
 			.replace(/{+\s?(user)?name\s?}+/gi, member.user.username)

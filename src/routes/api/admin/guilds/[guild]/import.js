@@ -2,6 +2,16 @@ const unzipper = require('unzipper');
 const { createInterface } = require('node:readline');
 const pkg = require('../../../../../../package.json');
 const { pools } = require('../../../../../lib/threads');
+const {
+	escapeHTML, checkTagRegex,
+} = require('../../../../../lib/security');
+const {
+	sanitize,
+	sanitizeCategory,
+	schemas,
+} = require('../../../../../lib/validation');
+
+const MAX_SETTINGS_SIZE = 10 * 1024 * 1024; // 10 MiB
 
 const { import: pool } = pools;
 
@@ -54,7 +64,7 @@ module.exports.post = fastify => ({
 				this.write('text-orange-500', 'text-orange-700 dark:text-orange-200', 'WARN', string);
 			},
 			write(style1, style2, prefix, string) {
-				res.raw.write(`<p><span class="${style1}">[${prefix}]</span> <span class="${style2}">${string}</span></p>`);
+				res.raw.write(`<p><span class="${style1}">[${prefix}]</span> <span class="${style2}">${escapeHTML(string)}</span></p>`);
 			},
 		};
 
@@ -71,12 +81,34 @@ module.exports.post = fastify => ({
 			}
 
 			userLog.info('Reading settings.json');
+			const settingsFile = files.find(f => f.path === 'settings.json');
+			if (!settingsFile) throw new Error('settings.json is missing');
+			if (settingsFile.uncompressedSize > MAX_SETTINGS_SIZE) throw new Error('settings.json is too large');
+			if (!files.find(f => f.path === 'tickets.jsonl')) throw new Error('tickets.jsonl is missing');
 			// `settingsJSON` is frozen, `settings` can be mutated
-			const settingsJSON = JSON.parse(await files.find(f => f.path === 'settings.json').buffer());
+			const settingsJSON = JSON.parse(await settingsFile.buffer());
 			Object.freeze(settingsJSON);
-			const settings = structuredClone(settingsJSON);
-			const { categories } = settings;
-			delete settings.categories; // this also mutates `settings`
+			if (!Array.isArray(settingsJSON.categories) || !Array.isArray(settingsJSON.tags)) throw new Error('settings.json is not a valid export');
+
+			// validate everything before deleting the existing settings;
+			// only known fields are copied so the file can't write to other guilds' data
+			const settings = sanitize(settingsJSON, schemas.guildSettings);
+			settings.tags = settingsJSON.tags.map(raw => {
+				const tag = sanitize(raw, schemas.tag);
+				if (tag.regex && !checkTagRegex(tag.regex).ok) {
+					userLog.warn(`Removed the unsafe or invalid pattern from the "${tag.name}" tag`);
+					tag.regex = null;
+				}
+				return tag;
+			});
+			const categories = settingsJSON.categories.map(raw => {
+				const {
+					data,
+					questions,
+				} = sanitizeCategory(raw);
+				data.questions = questions ?? [];
+				return data;
+			});
 
 			userLog.info('Importing general settings and tags');
 			await client.prisma.$transaction([
@@ -88,14 +120,7 @@ module.exports.post = fastify => ({
 					data: {
 						...settings,
 						id,
-						tags: {
-							createMany: {
-								data: settings.tags.map(tag => {
-									delete tag.id;
-									return tag;
-								}),
-							},
-						},
+						tags: { createMany: { data: settings.tags } },
 					},
 					// select ID so it doesn't return everything else
 					select: { id: true },
@@ -105,24 +130,15 @@ module.exports.post = fastify => ({
 
 			userLog.info('Importing categories');
 			const newCategories = await client.prisma.$transaction(
-				categories.map(category => {
-					delete category.id;
-					return client.prisma.category.create({
-						data: {
-							...category,
-							guild: { connect: { id } },
-							questions: {
-								createMany: {
-									data: category.questions.map(question => {
-										delete question.categoryId;
-										return question;
-									}),
-								},
-							},
-						},
-						select: { id: true },
-					});
-				}),
+				categories.map(category => client.prisma.category.create({
+					data: {
+						...category,
+						guild: { connect: { id } },
+						// question IDs are kept because answers reference them
+						questions: { createMany: { data: category.questions } },
+					},
+					select: { id: true },
+				})),
 			);
 
 			// settingsJSON.category because categories has been mutated (no id)
@@ -151,6 +167,11 @@ module.exports.post = fastify => ({
 
 			// TODO: batch 100 tickets per query?
 			const ticketsResolved = await Promise.all(ticketsPromises);
+			const importedIds = new Set(ticketsResolved.map(([ticket]) => ticket.id));
+			for (const [ticket] of ticketsResolved) {
+				// tickets can only reference other tickets from the same import
+				if (ticket.referencesTicket && !importedIds.has(ticket.referencesTicket.connect.id)) delete ticket.referencesTicket;
+			}
 			const queries = [];
 			const allMessages = [];
 

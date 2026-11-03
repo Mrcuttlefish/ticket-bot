@@ -52,7 +52,22 @@ async function getLogChannel(client, guildId) {
 		select: { logChannel: true },
 		where: { id: guildId },
 	});
-	return channelId && client.channels.cache.get(channelId);
+	return guildChannel(client, guildId, channelId);
+}
+
+/**
+ * Get a channel by ID, but only if it belongs to the given guild.
+ * Prevents one guild's logs being sent to a channel in another guild.
+ * @param {import("client")} client
+ * @param {string} guildId
+ * @param {string} channelId
+ * @returns {import("discord.js").GuildTextBasedChannel?}
+ */
+function guildChannel(client, guildId, channelId) {
+	if (!channelId) return null;
+	const channel = client.channels.cache.get(channelId);
+	if (!channel || channel.guildId !== guildId) return null;
+	return channel;
 }
 
 /**
@@ -87,7 +102,7 @@ async function logAdminEvent(client, {
 		user: `<@${member.user.id}>`,
 		verb: getMessage(`log.admin.verb.${action}`),
 	};
-	const channel = client.channels.cache.get(settings.logChannel);
+	const channel = guildChannel(client, guildId, settings.logChannel);
 	if (!channel) return;
 	const embeds = [
 		new EmbedBuilder()
@@ -143,7 +158,7 @@ async function logTicketEvent(client, {
 	const member = await guild.members.fetch(userId);
 	client.log.info.tickets(`${member.user.tag} ${client.i18n.getMessage('en-GB', `log.ticket.verb.${action}`)} ticket ${target.id}`);
 	if (!ticket.guild.logChannel) return;
-	const channel = client.channels.cache.get(ticket.guild.logChannel);
+	const channel = guildChannel(client, ticket.guild.id, ticket.guild.logChannel);
 	if (!channel) return;
 	const colour = action === 'create'
 		? 'Aqua' : action === 'close'
@@ -211,7 +226,7 @@ async function logMessageEvent(client, {
 		user: `<@${executor?.user.id}>`,
 		verb: getMessage(`log.message.verb.${action}`),
 	};
-	const channel = client.channels.cache.get(ticket.guild.logChannel);
+	const channel = guildChannel(client, ticket.guild.id, ticket.guild.logChannel);
 	if (!channel) return;
 	const embeds = [
 		new EmbedBuilder()

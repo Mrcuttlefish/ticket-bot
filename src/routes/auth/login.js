@@ -1,19 +1,20 @@
 const { randomBytes } = require('crypto');
-
-const pattern = /^\/(?!\/)[^\s]*$/;
+const { isSafeRedirect } = require('../../lib/security');
 
 module.exports.get = () => ({
 	handler: async function (req, res) {
 		const { client } = req.routeOptions.config;
 
 		const state = new URLSearchParams({
-			redirect: pattern.test(req.query.r ?? '') ? req.query.r : '',
+			redirect: isSafeRedirect(req.query.r) ? req.query.r : '',
 			secret: randomBytes(8).toString('hex'),
 		});
 
 		res.setCookie('oauth2-state', state.toString(), {
 			httpOnly: true,
+			path: '/auth',
 			sameSite: 'lax',
+			secure: process.env.HTTP_EXTERNAL?.startsWith('https://'),
 		});
 
 		const params = {
@@ -30,7 +31,7 @@ module.exports.get = () => ({
 			params.scope = 'applications.commands applications.commands.permissions.update bot ' + params.scope;
 			params.integration_type = '0';
 			params.permissions = '268561488';
-			if (req.query.guild) {
+			if (/^\d{17,20}$/.test(req.query.guild ?? '')) {
 				params.guild_id = req.query.guild;
 				params.disable_guild_select = 'true';
 			}

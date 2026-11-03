@@ -14,6 +14,7 @@ const {
 	isStaff,
 } = require('../../lib/users');
 const ms = require('ms');
+const { compileTagRegex } = require('../../lib/security');
 const emoji = require('node-emoji');
 
 module.exports = class extends Listener {
@@ -282,7 +283,8 @@ module.exports = class extends Listener {
 					client.keyv.set(cacheKey, tags, ms('1h'));
 				}
 
-				const tag = tags.find(tag => tag.regex && message.content.match(new RegExp(tag.regex, 'mi')));
+				// patterns are validated when saved, but older ones may be invalid or unsafe; compileTagRegex skips those
+				const tag = tags.find(tag => compileTagRegex(tag.regex)?.test(message.content));
 				if (tag) {
 					await message.reply({
 						embeds: [

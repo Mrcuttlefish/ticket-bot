@@ -1,5 +1,13 @@
 const { logAdminEvent } = require('../../../../../lib/logging.js');
-const { Colors } = require('discord.js');
+const {
+	ChannelType,
+	Colors,
+} = require('discord.js');
+const {
+	ValidationError,
+	sanitize,
+	schemas,
+} = require('../../../../../lib/validation');
 
 module.exports.get = fastify => ({
 	handler: async req => {
@@ -16,19 +24,31 @@ module.exports.get = fastify => ({
 
 module.exports.patch = fastify => ({
 	handler: async req => {
-		const data = req.body;
-		if (Object.prototype.hasOwnProperty.call(data, 'id')) delete data.id;
-		if (Object.prototype.hasOwnProperty.call(data, 'createdAt')) delete data.createdAt;
+		// only known fields; prevents nested relation writes and foreign key changes
+		const data = sanitize(req.body, schemas.guildSettings);
 		const colours = ['errorColour', 'primaryColour', 'successColour'];
 		for (const c of colours) {
-			if (data[c] && !data[c].startsWith('#') && !(data[c] in Colors)) { // if not null/empty and not hex
-				throw new Error(`${data[c]} is not a valid colour. Valid colours are HEX and: ${Object.keys(Colors).join(', ')}`);
+			if (data[c] && !/^#[0-9a-f]{3,6}$/i.test(data[c]) && !(data[c] in Colors)) { // if not null/empty and not hex
+				throw new ValidationError(c, `${data[c]} is not a valid colour. Valid colours are HEX and: ${Object.keys(Colors).join(', ')}`);
 			}
 		}
 
 		/** @type {import('client')} */
 		const client = req.routeOptions.config.client;
 		const id = req.params.guild;
+		const guild = client.guilds.cache.get(id);
+
+		if (data.logChannel) {
+			// the log channel must be a text channel in this guild
+			const channel = guild.channels.cache.get(data.logChannel);
+			if (!channel || !channel.isTextBased() || channel.type === ChannelType.GuildVoice) {
+				throw new ValidationError('logChannel', 'must be a text channel in this server');
+			}
+		}
+
+		if (Array.isArray(data.autoTag)) {
+			data.autoTag = data.autoTag.filter(channelId => guild.channels.cache.has(channelId));
+		}
 		const original = await client.prisma.guild.findUnique({ where: { id } });
 		const settings = await client.prisma.guild.update({
 			data: data,

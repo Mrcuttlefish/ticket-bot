@@ -1,4 +1,5 @@
 const { Autocompleter } = require('@eartharoid/dbf');
+const { includesIgnoreCase } = require('../lib/security');
 const ms = require('ms');
 
 module.exports = class TagCompleter extends Autocompleter {
@@ -34,9 +35,9 @@ module.exports = class TagCompleter extends Autocompleter {
 		}
 
 		const options = value ? tags.filter(tag =>
-			tag.name.match(new RegExp(value, 'i')) ||
-			tag.content.match(new RegExp(value, 'i')) ||
-			tag.regex?.match(new RegExp(value, 'i')),
+			includesIgnoreCase(tag.name, value) ||
+			includesIgnoreCase(tag.content, value) ||
+			includesIgnoreCase(tag.regex, value),
 		) : tags;
 		await interaction.respond(
 			options
