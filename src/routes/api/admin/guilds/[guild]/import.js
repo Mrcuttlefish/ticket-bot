@@ -219,5 +219,5 @@ module.exports.post = fastify => ({
 			res.raw.end();
 		}
 	},
-	onRequest: [fastify.authenticate, fastify.isAdmin],
+	onRequest: [fastify.authenticate, fastify.isOwner],
 });

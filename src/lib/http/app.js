@@ -86,7 +86,8 @@ module.exports = async function buildApp(client) {
 		}
 	});
 
-	fastify.decorate('isAdmin', async (req, res) => {
+	// 2: Manage Server, 3: the server's owner (see users.js getPrivilegeLevel; bot supers are above both)
+	const requirePrivilege = level => async (req, res) => {
 		try {
 			const userId = req.user.id;
 			const guildId = req.params.guild;
@@ -115,11 +116,10 @@ module.exports = async function buildApp(client) {
 				});
 			}
 			const guildMember = await guild.members.fetch(userId);
-			const isAdmin = await getPrivilegeLevel(guildMember) >= 2;
-			if (!isAdmin) {
+			if (await getPrivilegeLevel(guildMember) < level) {
 				return res.code(403).send({
 					error: 'Forbidden',
-					message: 'You are not permitted for this action.',
+					message: level >= 3 ? 'Only the server\'s owner can do this.' : 'You are not permitted for this action.',
 					statusCode: 403,
 
 				});
@@ -133,7 +133,11 @@ module.exports = async function buildApp(client) {
 				statusCode: 403,
 			});
 		}
-	});
+	};
+	fastify.decorate('isAdmin', requirePrivilege(2));
+	// exports hold every ticket's messages, including who wrote anonymous staff messages, and imports replace
+	// everything, so they're for the server's owner only
+	fastify.decorate('isOwner', requirePrivilege(3));
 
 	// body processing
 	fastify.addHook('preHandler', (req, res, done) => {

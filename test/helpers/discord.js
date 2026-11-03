@@ -207,7 +207,7 @@ function makeCategoryChannel(guild, {
 }
 
 function makeGuild(client, {
-	id = snowflake(), name = 'Test server',
+	id = snowflake(), name = 'Test server', ownerId = null,
 } = {}) {
 	const guild = {
 		channels: {
@@ -239,6 +239,7 @@ function makeGuild(client, {
 			},
 		},
 		name,
+		ownerId,
 		preferredLocale: 'en-GB',
 		roles: { cache: new Collection() },
 	};
