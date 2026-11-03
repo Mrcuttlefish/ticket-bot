@@ -506,3 +506,87 @@ test('opening message styles: text sends plain text, off sends only the mentions
 	assert.match(opening.content, /my order/);
 	await new Promise(resolve => setTimeout(resolve, 50)); // let the background create logs finish
 });
+
+// security audit fixes
+
+test('audit: edits in a kept closed channel are never added to the archive', async () => {
+	const {
+		channel, client, staff,
+	} = await openTicket({ keepClosedFor: 0 });
+	await closeNow(client, channel, staff.id);
+	const MessageUpdate = require('../../src/listeners/client/messageUpdate');
+	const { makeMessage } = require('../helpers/discord');
+	const note = makeMessage(channel, {
+		author: staff.user,
+		content: 'staff-only note',
+		member: staff,
+	});
+	note.editedAt = new Date();
+	note.flags = { has: () => false };
+	await runComponent(MessageUpdate, client, { cleanContent: 'before' }, note);
+	assert.equal(await client.prisma.archivedMessage.findUnique({ where: { id: note.id } }), null);
+	await new Promise(resolve => setTimeout(resolve, 50));
+});
+
+test('audit: if a closed channel can\'t be locked, it is deleted instead of staying open to the creator', async () => {
+	const {
+		channel, client, staff,
+	} = await openTicket({ keepClosedFor: 0 });
+	channel.permissionOverwrites.edit = async () => {
+		throw new Error('Missing Permissions');
+	};
+	await closeNow(client, channel, staff.id);
+	assert.equal(channel.deleted, true);
+	assert.equal((await client.prisma.ticket.findUnique({ where: { id: channel.id } })).open, false);
+});
+
+test('audit: releasing never removes the creator\'s access, and does nothing to overwrites when unclaimed', async () => {
+	const t = await openTicket({
+		claimHide: false,
+		claiming: true,
+	});
+	// a staff member who opened their own ticket and claimed it
+	const staffCreator = t.creator;
+	staffCreator.roles.cache.set(t.staffRole.id, t.staffRole);
+	await claim(t.client, t.channel, staffCreator);
+	await release(t.client, t.channel, staffCreator);
+	assert.equal(t.channel.permissionOverwrites.cache.has(staffCreator.id), true);
+
+	const u = await openTicket({ claiming: true });
+	await u.channel.permissionOverwrites.edit(u.staff, { ViewChannel: true });
+	await release(u.client, u.channel, u.staff); // nobody claimed it
+	assert.equal(u.channel.permissionOverwrites.cache.has(u.staff.id), true);
+});
+
+test('audit: the closed DM is still sent when the transcript can\'t be attached', async () => {
+	const { client } = ctx;
+	const guild = makeGuild(client);
+	client.commands = {
+		commands: {
+			slash: new Map([['transcript', {
+				fillTemplate: async () => ({
+					fileName: 'big.html',
+					transcript: 'x',
+				}),
+			}]]),
+		},
+	};
+	try {
+		const { category } = await seedCategory(client, guild, { settings: { transcriptDm: true } });
+		const creator = makeMember(guild);
+		const dms = [];
+		creator.send = async payload => {
+			if (payload.files?.length) throw new Error('Request entity too large');
+			dms.push(payload);
+		};
+		await client.tickets.create({
+			categoryId: category.id,
+			interaction: makeInteraction({ member: creator }),
+		});
+		await closeNow(client, guild.created[0], null);
+		assert.equal(dms.length, 1);
+		assert.ok(dms[0].embeds.length);
+	} finally {
+		delete client.commands;
+	}
+});

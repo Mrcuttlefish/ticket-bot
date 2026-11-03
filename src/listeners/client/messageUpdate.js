@@ -42,7 +42,9 @@ module.exports = class extends Listener {
 		});
 		if (!ticket) return;
 
-		if (resolveCategorySettings(ticket.guild, ticket.category).archive) {
+		// the archive of a closed ticket is final: edits in a kept channel (e.g. staff notes written after closing,
+		// which were never archived) must not be added to it, or they'd show up in transcripts the creator can see
+		if (ticket.open && resolveCategorySettings(ticket.guild, ticket.category).archive) {
 			try {
 				await client.tickets.archiver.saveMessage(ticket.id, newMessage);
 			} catch (error) {

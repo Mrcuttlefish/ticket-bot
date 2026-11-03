@@ -183,3 +183,32 @@ test('the details of text opening messages can be edited', async () => {
 	assert.equal(edits[0].content, 'head' + DETAILS_MARK + '**Topic**\nnew');
 	assert.deepEqual(edits[0].allowedMentions, { parse: [] });
 });
+
+test('audit: members can\'t add a second details marker or markdown through their name', () => {
+	const message = buildOpeningMessage({
+		author: { name: '**[click](https://example.com)**' },
+		colour: 'Blurple',
+		content: 'mentions',
+		description: 'Topic: a​b',
+		fields: [{
+			name: 'Topic',
+			value: 'x' + DETAILS_MARK + 'y',
+		}],
+		style: 'TEXT',
+	});
+	assert.equal(message.content.split(DETAILS_MARK).length, 2);
+	assert.ok(message.content.includes('\\*\\*\\[click\\]'));
+});
+
+test('audit: a backslash in a member\'s name can\'t undo the escaping', () => {
+	const message = buildOpeningMessage({
+		author: { name: 'evil\\' },
+		colour: 'Blurple',
+		content: 'mentions',
+		description: null,
+		fields: [],
+		style: 'TEXT',
+	});
+	// the name's backslash is escaped, so the closing ** still closes the bold
+	assert.ok(message.content.includes('**evil\\\\**'), message.content);
+});

@@ -44,6 +44,15 @@ const LIMITS = {
 
 // Discord's limit for a message's content
 const TEXT_LIMIT = 2000;
+
+/**
+ * A member's name as plain text in markdown. One pass escapes every character Discord's markdown uses, including
+ * backslashes and link brackets (escapeMarkdown leaves brackets alone, and escaping them after it would let a
+ * backslash in the name undo its escaping).
+ * @param {string} name
+ * @returns {string}
+ */
+const escapeName = name => String(name ?? '').replace(/[\\*_~`|>#\-[\]()<:]/g, '\\$&');
 // in text opening messages, the topic or answers come after this line so they can be replaced when edited
 const DETAILS_MARK = '\n\u200b\n';
 
@@ -143,7 +152,7 @@ function buildOpeningMessage({
 }) {
 	if (style === 'TEXT' || style === 'OFF') {
 		const head = style === 'TEXT'
-			? [content, `**${author.name}**`, description, image].filter(Boolean).join('\n\n')
+			? [content, `**${escapeName(author.name)}**`, description, image].filter(Boolean).join('\n\n')
 			: content;
 		return {
 			// the text can include things members wrote (the topic and answers, or placeholders in the opening message),
@@ -237,8 +246,11 @@ function getAllowedMentions(text) {
  * @returns {string}
  */
 function buildText(head, fields) {
-	const details = fields.length ? truncate(fields.map(field => `**${field.name}**\n${field.value}`).join('\n\n'), LIMITS.details) : '';
-	return truncate(head, TEXT_LIMIT - DETAILS_MARK.length - details.length) + DETAILS_MARK + details;
+	// members' text (the topic, answers, or placeholders in the head) can't add a second marker, which would make
+	// later edits replace the wrong part of the message
+	const clean = text => String(text ?? '').replaceAll('\u200b', '');
+	const details = fields.length ? truncate(fields.map(field => `**${clean(field.name)}**\n${clean(field.value)}`).join('\n\n'), LIMITS.details) : '';
+	return truncate(clean(head), TEXT_LIMIT - DETAILS_MARK.length - details.length) + DETAILS_MARK + details;
 }
 
 /**
