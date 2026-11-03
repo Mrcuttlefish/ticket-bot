@@ -28,8 +28,11 @@ module.exports = class ClaimSlashCommand extends SlashCommand {
 		const staff = await isStaff(interaction.guild, interaction.member.id);
 		const settings = await client.prisma.guild.findUnique({ where: { id: interaction.guild.id } });
 		const getMessage = client.i18n.getLocale(settings.locale);
+		// commands that only staff can use (see `updateCommandPermissions`); hidden from members (upstream #544)
+		const staffOnly = ['claim', 'force-close', 'move', 'priority', 'release'];
 		const commands = client.application.commands.cache
 			.filter(c => c.type === 1)
+			.filter(c => staff || (!staffOnly.includes(c.name) && !c.defaultMemberPermissions?.bitfield))
 			.map(c => `> </${c.name}:${c.id}>: ${c.description}`)
 			.join('\n');
 		const newCommand = client.application.commands.cache.find(c => c.name === 'new');

@@ -51,9 +51,23 @@ module.exports = async function handleStaleTickets(client, staleInterval) {
 						closed++;
 					}
 				} else if (Date.now() - (ticket.lastMessageAt || ticket.createdAt) >= guild.staleAfter) {
+					// Stale state is kept in memory, so it is lost when the bot restarts. Base the close time on the
+					// ticket's last activity rather than "now", otherwise regular restarts mean tickets (especially
+					// ones with no messages) are re-marked as stale forever and never close (upstream #552).
+					const lastActivity = (ticket.lastMessageAt || ticket.createdAt).getTime();
+					const closeAt = guild.autoClose ? lastActivity + guild.staleAfter + guild.autoClose : null;
+					if (closeAt && closeAt <= Date.now()) {
+						await client.tickets.finallyClose(ticket.id, {
+							closedBy: null,
+							reason: 'inactivity',
+						});
+						closed++;
+						continue;
+					}
+
 					// set as stale
 					/** @type {import("discord.js").TextChannel} */
-					const channel = await client.channels.fetch(ticket.id);
+					const channel = await client.channels.fetch(ticket.id).catch(() => null);
 					if (!channel) {
 						await client.tickets.finallyClose(ticket.id, { reason: 'channel deleted' });
 						closed++;
@@ -89,14 +103,14 @@ module.exports = async function handleStaleTickets(client, staleInterval) {
 								.setColor(guild.primaryColour)
 								.setTitle(getMessage('ticket.inactive.title'))
 								.setDescription(getMessage('ticket.inactive.description', {
-									close: `</${closeCommand.name}:${closeCommand.id}>`,
+									close: closeCommand ? `</${closeCommand.name}:${closeCommand.id}>` : '`/close`',
 									timestamp: Math.floor((ticket.lastMessageAt || ticket.createdAt).getTime() / 1000),
 								})),
 						],
 					});
 
 					client.tickets.$stale.set(ticket.id, {
-						closeAt: guild.autoClose ? Date.now() + guild.autoClose : null,
+						closeAt,
 						closedBy: null,
 						message: sent,
 						messages: 0,
