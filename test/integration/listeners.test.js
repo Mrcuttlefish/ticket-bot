@@ -4,7 +4,7 @@ const {
 	seedCategory, useTestClient,
 } = require('../helpers/client');
 const {
-	embedText, makeGuild, makeInteraction, makeMember, makeMessage, makeRole, runComponent,
+	embedText, makeGuild, makeInteraction, makeMember, makeMessage, makeRole, makeUser, runComponent,
 } = require('../helpers/discord');
 const MessageCreate = require('../../src/listeners/client/messageCreate');
 const EditButton = require('../../src/buttons/edit');
@@ -29,8 +29,11 @@ async function openTicket(seed = {}) {
 		staffRoles: [staffRole.id],
 		...seed,
 	});
-	const creator = makeMember(guild);
-	const staff = makeMember(guild, { roles: [staffRole.id] });
+	const creator = makeMember(guild, { user: makeUser({ username: 'casey' }) });
+	const staff = makeMember(guild, {
+		roles: [staffRole.id],
+		user: makeUser({ username: 'alex' }),
+	});
 	await client.tickets.create({
 		categoryId: category.id,
 		interaction: makeInteraction({ member: creator }),
@@ -164,4 +167,70 @@ test('only the creator can edit their answers (upstream #508)', async () => {
 	});
 	await runComponent(EditButton, client, {}, own);
 	assert.equal(own.responses[0].kind, 'showModal');
+});
+
+test('anonymous categories: staff messages are posted again as "Staff" and archived with the real author', async () => {
+	const {
+		client, channel, creator, staff,
+	} = await openTicket({ anonymous: true });
+
+	const fromCreator = await say(client, channel, creator, 'my order is late');
+	assert.equal(fromCreator.deleted, false, 'the creator\'s messages are left alone');
+
+	const fromStaff = await say(client, channel, staff, 'looking into it @everyone');
+	await eventually(() => fromStaff.deleted);
+	assert.equal(fromStaff.deleted, true, 'the original is deleted');
+	const relay = channel.sent.find(p => p.nonce?.startsWith('anon'));
+	assert.ok(relay, 'posted again by the bot');
+	assert.equal(relay.embeds[0].data.author.name, 'Staff');
+	assert.equal(relay.embeds[0].data.description, 'looking into it @everyone');
+	assert.deepEqual(relay.allowedMentions, { parse: ['users'] }, 'relays can\'t ping everyone or roles');
+	assert.ok(!JSON.stringify(relay).includes(staff.id), 'the relay doesn\'t name the staff member');
+
+	// the original is archived with its real author, and isn't marked as deleted
+	const archived = await eventually(() => client.prisma.archivedMessage.findUnique({ where: { id: fromStaff.id } }));
+	assert.equal(archived.authorId, staff.id);
+	const MessageDelete = require('../../src/listeners/client/messageDelete');
+	await runComponent(MessageDelete, client, fromStaff);
+	assert.equal((await client.prisma.archivedMessage.findUnique({ where: { id: fromStaff.id } })).deleted, false);
+
+	// the relay itself (sent by the bot) isn't archived as a second copy
+	const relayMessage = [...channel.messages.cache.values()].find(m => m.nonce === relay.nonce);
+	await runComponent(MessageCreate, client, relayMessage);
+	await new Promise(resolve => setTimeout(resolve, 100));
+	assert.equal(await client.prisma.archivedMessage.findUnique({ where: { id: relayMessage.id } }), null);
+});
+
+test('anonymous categories: transcripts hide staff from the creator, but not from staff', async () => {
+	const {
+		client, channel, creator, staff,
+	} = await openTicket({ anonymous: true });
+	await say(client, channel, creator, 'my order is late');
+	const fromStaff = await say(client, channel, staff, 'looking into it');
+	await eventually(() => client.prisma.archivedMessage.findUnique({ where: { id: fromStaff.id } }));
+
+	const TranscriptCommand = require('../../src/commands/slash/transcript');
+	const cmd = Object.create(TranscriptCommand.prototype);
+	cmd.client = client;
+	cmd.template = require('node:fs').readFileSync('src/user/templates/transcript.md.mustache', 'utf8');
+	client.config.templates = { transcript: 'transcript.md' };
+
+	const transcriptFor = async member => {
+		const interaction = makeInteraction({
+			channel,
+			member,
+			type: 'command',
+		});
+		await cmd.run(interaction, channel.id);
+		const file = interaction.responses.find(r => r.kind === 'editReply').data.files[0];
+		return file.attachment.toString();
+	};
+	const forCreator = await transcriptFor(creator);
+	assert.match(forCreator, /looking into it/);
+	assert.ok(!forCreator.includes(staff.user.username), 'the creator doesn\'t see the staff member\'s name');
+	assert.match(forCreator, /Staff/);
+	assert.ok(forCreator.includes(creator.user.username));
+
+	const forStaff = await transcriptFor(staff);
+	assert.ok(forStaff.includes(staff.user.username), 'staff see who replied');
 });

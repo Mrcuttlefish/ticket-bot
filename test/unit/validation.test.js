@@ -148,3 +148,8 @@ test('working hours accept null (or []) for days off, as the settings site sends
 	assert.throws(() => sanitize({ workingHours: ['UTC', '9-5', null, null, null, null, null, null] }, schemas.guildSettings), ValidationError);
 	assert.throws(() => sanitize({ workingHours: ['UTC', null] }, schemas.guildSettings), ValidationError);
 });
+
+test('categories can be made anonymous', () => {
+	assert.equal(sanitizeCategory({ anonymous: true }).data.anonymous, true);
+	assert.throws(() => sanitizeCategory({ anonymous: 'yes' }));
+});

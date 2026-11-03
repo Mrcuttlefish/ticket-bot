@@ -62,6 +62,8 @@ module.exports = class TicketManager {
 		// how long the "closed" message is shown before the channel is deleted
 		this.closeDelay = 3e3;
 		this.$stale = new Collection();
+		// IDs of anonymous staff messages that were posted again by the bot (see anonymous.js)
+		this.$relayed = new Set();
 	}
 
 	/**
@@ -913,7 +915,7 @@ module.exports = class TicketManager {
 			embeds: [
 				new ExtendedEmbedBuilder()
 					.setColor(ticket.guild.primaryColour)
-					.setDescription(getMessage('ticket.claimed', { user: interaction.user.toString() })),
+					.setDescription(getMessage('ticket.claimed', { user: ticket.category?.anonymous ? getMessage('ticket.anonymous.staff') : interaction.user.toString() })),
 			],
 		});
 
@@ -1009,7 +1011,7 @@ module.exports = class TicketManager {
 			embeds: [
 				new ExtendedEmbedBuilder()
 					.setColor(ticket.guild.primaryColour)
-					.setDescription(getMessage('ticket.released', { user: interaction.user.toString() })),
+					.setDescription(getMessage('ticket.released', { user: ticket.category?.anonymous ? getMessage('ticket.anonymous.staff') : interaction.user.toString() })),
 			],
 		});
 
@@ -1158,16 +1160,18 @@ module.exports = class TicketManager {
 			action: 'close',
 			expect: staff ? 'user' : 'staff',
 		};
+		// in anonymous tickets, staff are named "Staff"
+		const hideStaff = staff && ticket.category?.anonymous;
 		const embed = new ExtendedEmbedBuilder(/* {
 			iconURL: interaction.guild.iconURL(),
 			text: ticket.guild.footer,
 		} */)
 			.setColor(ticket.guild.primaryColour)
-			.setTitle(getMessage(`ticket.close.${staff ? 'staff' : 'user'}_request.title`, { requestedBy: interaction.member.displayName }));
+			.setTitle(getMessage(`ticket.close.${staff ? 'staff' : 'user'}_request.title`, { requestedBy: hideStaff ? getMessage('ticket.anonymous.staff') : interaction.member.displayName }));
 
 		if (staff) {
 			embed.setDescription(
-				getMessage('ticket.close.staff_request.description', { requestedBy: interaction.user.toString() }) +
+				getMessage('ticket.close.staff_request.description', { requestedBy: hideStaff ? getMessage('ticket.anonymous.staff') : interaction.user.toString() }) +
 				(resolveCategorySettings(ticket.guild, ticket.category).archive ? getMessage('ticket.close.staff_request.archived') : ''),
 			);
 		}
@@ -1335,7 +1339,8 @@ module.exports = class TicketManager {
 			closedById: ticket.closedById && {
 				inline: true,
 				name: getMessage('dm.closed.fields.closed_by'),
-				value: `<@${ticket.closedById}>`,
+				// in anonymous tickets the creator isn't told which staff member closed it
+				value: ticket.category?.anonymous && ticket.closedById !== ticket.createdById ? getMessage('ticket.anonymous.staff') : `<@${ticket.closedById}>`,
 			},
 			created: {
 				inline: true,

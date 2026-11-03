@@ -11,6 +11,7 @@ const { AttachmentBuilder } = require('discord.js');
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { formatChannelName } = require('../../lib/tickets/placeholders');
 const { pools } = require('../../lib/threads');
+const { anonymiseTranscript } = require('../../lib/tickets/anonymous');
 
 const { transcript: pool } = pools;
 
@@ -54,7 +55,11 @@ module.exports = class TranscriptSlashCommand extends SlashCommand {
 	shouldAllowAccess(interaction, ticket) {
 		// the creator can always get their ticket, even from outside the guild
 		if (ticket.createdById === interaction.user.id) return true; // user not member (DMs)
-		// everyone else must be in the guild
+		return this.isStaffFor(interaction, ticket);
+	}
+
+	isStaffFor(interaction, ticket) {
+		// must be in the guild
 		if (interaction.guild?.id !== ticket.guildId) return false;
 		// and have authority
 		if (interaction.client.supers.includes(interaction.member.id)) return true;
@@ -63,11 +68,17 @@ module.exports = class TranscriptSlashCommand extends SlashCommand {
 		return false;
 	}
 
-	async fillTemplate(ticket) {
+	/**
+	 * @param {object} ticket
+	 * @param {object} [options]
+	 * @param {boolean} [options.anonymise] hide staff names (for the creator of an anonymous ticket)
+	 */
+	async fillTemplate(ticket, { anonymise = false } = {}) {
 		/** @type {import("client")} */
 		const client = this.client;
 
 		ticket = await pool.queue(w => w(ticket));
+		if (anonymise) anonymiseTranscript(ticket, client.i18n.getMessage(ticket.guild.locale, 'ticket.anonymous.staff'));
 
 		const channelName = formatChannelName(ticket.category.channelName, {
 			displayName: ticket.createdBy?.displayName,
@@ -166,7 +177,7 @@ module.exports = class TranscriptSlashCommand extends SlashCommand {
 		const {
 			fileName,
 			transcript,
-		} = await this.fillTemplate(ticket);
+		} = await this.fillTemplate(ticket, { anonymise: Boolean(ticket.category.anonymous) && !this.isStaffFor(interaction, ticket) });
 		const attachment = new AttachmentBuilder()
 			.setFile(Buffer.from(transcript))
 			.setName(fileName);

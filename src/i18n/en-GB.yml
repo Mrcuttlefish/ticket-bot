@@ -451,6 +451,8 @@ modals:
     label: Topic
     placeholder: What is this ticket about?
 ticket:
+  anonymous:
+    staff: Staff
   answers:
     no_value: "*No response*"
   claimed: 🙌 {user} has claimed this ticket.

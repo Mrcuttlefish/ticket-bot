@@ -15,6 +15,9 @@ const {
 } = require('../../lib/users');
 const ms = require('ms');
 const { handleGhostPing } = require('../../lib/tickets/ghost-ping');
+const {
+	isRelay, relayMessage, shouldRelay,
+} = require('../../lib/tickets/anonymous');
 const { resolveCategorySettings } = require('../../lib/tickets/options');
 const { compileTagRegex } = require('../../lib/security');
 const { fillTagPlaceholders } = require('../../lib/tags');
@@ -194,7 +197,8 @@ module.exports = class extends Listener {
 
 			if (ticket) {
 				// archive messages (categories can override the archive setting, upstream #536)
-				if (resolveCategorySettings(settings, ticket.category).archive) {
+				// relays of anonymous staff messages aren't archived; the original was archived with its real author
+				if (resolveCategorySettings(settings, ticket.category).archive && !isRelay(message, client.user.id)) {
 					client.tickets.archiver.saveMessage(ticket.id, message)
 						.catch(error => {
 							client.log.warn('Failed to archive message', message.id);
@@ -220,6 +224,16 @@ module.exports = class extends Listener {
 					if (ticket.firstResponseAt === null && staff) data.firstResponseAt = new Date();
 
 					handleGhostPing(client, message, ticket, settings, staff).catch(client.log.error);
+					if (shouldRelay({
+						message,
+						staff,
+						ticket,
+					})) {
+						relayMessage(client, message, settings, getMessage).catch(error => {
+							client.log.warn('Failed to relay anonymous message', message.id);
+							client.log.error(error);
+						});
+					}
 					ticket = await client.prisma.ticket.update({
 						data,
 						where: { id: ticket.id },
