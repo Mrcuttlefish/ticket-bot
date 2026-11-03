@@ -1,0 +1,1 @@
+import{r as t}from"../chunks/BMX1ug8m.js";function o({params:e}){t(307,`/${e.guild}/tickets`)}const i=Object.freeze(Object.defineProperty({__proto__:null,load:o},Symbol.toStringTag,{value:"Module"}));export{i as universal};

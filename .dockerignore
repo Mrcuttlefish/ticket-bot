@@ -1,6 +1,7 @@
 # ignore everything
 *
 # except these directories
+!dashboard
 !db
 !scripts
 !src

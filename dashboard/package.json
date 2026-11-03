@@ -1,0 +1,5 @@
+{
+	"private": true,
+	"type": "module",
+	"description": "Prebuilt web dashboard (SvelteKit, adapter-node) from Mrcuttlefish/ticket-portal. Regenerate with scripts/update-dashboard.sh; don't edit by hand."
+}
