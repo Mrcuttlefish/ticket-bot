@@ -1,1 +1,0 @@
-import{au as a}from"./ByRWmfkd.js";a();

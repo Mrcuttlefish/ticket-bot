@@ -1,0 +1,1 @@
+import"./Bzak7iHL.js";import{a as s,c as p,d as e,n,r as m}from"./DOgNAR-V.js";import{s as i}from"./Djz8q1Z3.js";var d=p('<p class="mt-1 text-sm font-normal text-gray-500 dark:text-slate-400"><!></p>');function x(a,r){var t=d(),o=e(t);i(o,()=>r.children??n),m(t),s(a,t)}export{x as H};
