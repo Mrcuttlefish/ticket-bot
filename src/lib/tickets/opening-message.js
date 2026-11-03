@@ -23,6 +23,7 @@ const {
 	resolveColor,
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('../embed');
+const { buttonEmoji } = require('../icons');
 
 // component IDs (any positive 32-bit integer that is unique in the message)
 const IDS = {
@@ -82,7 +83,7 @@ function buildButtons({
 			new ButtonBuilder()
 				.setCustomId(JSON.stringify({ action: 'edit' }))
 				.setStyle(ButtonStyle.Secondary)
-				.setEmoji(getMessage('buttons.edit.emoji'))
+				.setEmoji(buttonEmoji(getMessage, 'edit'))
 				.setLabel(getMessage('buttons.edit.text')),
 		);
 	}
@@ -91,7 +92,7 @@ function buildButtons({
 			new ButtonBuilder()
 				.setCustomId(JSON.stringify({ action: claim }))
 				.setStyle(ButtonStyle.Secondary)
-				.setEmoji(getMessage(`buttons.${claim}.emoji`))
+				.setEmoji(buttonEmoji(getMessage, claim))
 				.setLabel(getMessage(`buttons.${claim}.text`)),
 		);
 	}
@@ -100,7 +101,7 @@ function buildButtons({
 			new ButtonBuilder()
 				.setCustomId(JSON.stringify({ action: 'close' }))
 				.setStyle(ButtonStyle.Danger)
-				.setEmoji(getMessage('buttons.close.emoji'))
+				.setEmoji(buttonEmoji(getMessage, 'close'))
 				.setLabel(getMessage('buttons.close.text')),
 		);
 	}

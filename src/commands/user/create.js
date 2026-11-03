@@ -12,6 +12,7 @@ const {
 	MessageFlags,
 } = require('discord.js');
 const emoji = require('node-emoji');
+const { buttonEmoji } = require('../../lib/icons');
 
 module.exports = class CreateUserCommand extends UserCommand {
 	constructor(client, options) {
@@ -67,7 +68,7 @@ module.exports = class CreateUserCommand extends UserCommand {
 									targetUser: interaction.targetId,
 								}))
 								.setStyle(ButtonStyle.Primary)
-								.setEmoji(getMessage('buttons.create.emoji')) // emoji.get('ticket')
+								.setEmoji(buttonEmoji(getMessage, 'create')) // emoji.get('ticket')
 								.setLabel(getMessage('buttons.create.text')),
 						),
 				],

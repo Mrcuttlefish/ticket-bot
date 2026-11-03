@@ -22,6 +22,7 @@ const { resolveCategorySettings } = require('../../lib/tickets/options');
 const { compileTagRegex } = require('../../lib/security');
 const { fillTagPlaceholders } = require('../../lib/tags');
 const emoji = require('node-emoji');
+const { buttonEmoji } = require('../../lib/icons');
 
 module.exports = class extends Listener {
 	constructor(client, options) {
@@ -124,7 +125,7 @@ module.exports = class extends Listener {
 									.setCustomId(message.id)
 									.setStyle(Success)
 									.setLabel(getMessage('buttons.confirm_open.text'))
-									.setEmoji(getMessage('buttons.confirm_open.emoji')),
+									.setEmoji(buttonEmoji(getMessage, 'confirm_open')),
 							),
 					],
 					embeds: [
