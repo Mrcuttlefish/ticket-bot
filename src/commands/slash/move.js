@@ -5,6 +5,7 @@ const {
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { isStaff } = require('../../lib/users');
 const { getEmoji } = require('./priority');
+const { formatChannelName } = require('../../lib/tickets/placeholders');
 module.exports = class MoveSlashCommand extends SlashCommand {
 	constructor(client, options) {
 		const name = 'move';
@@ -148,10 +149,11 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 				newCategory.discordCategory !== ticket.category.discordCategory
 			) {
 				const allow = ['ViewChannel', 'ReadMessageHistory', 'SendMessages', 'EmbedLinks', 'AttachFiles'];
-				const channelName = newCategory.channelName
-					.replace(/{+\s?(user)?name\s?}+/gi, creator.user.username)
-					.replace(/{+\s?(nick|display)(name)?\s?}+/gi, creator.displayName)
-					.replace(/{+\s?num(ber)?\s?}+/gi, ticket.number === 1488 ? '1487b' : ticket.number);
+				const channelName = formatChannelName(newCategory.channelName, {
+					displayName: creator.displayName,
+					number: ticket.number,
+					username: creator.user.username,
+				});
 				await interaction.channel.edit({
 					lockPermissions: false,
 					name: ticket.priority ? getEmoji(ticket.priority) + channelName : channelName,

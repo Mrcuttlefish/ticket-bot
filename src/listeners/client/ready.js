@@ -1,4 +1,5 @@
 const { Listener } = require('@eartharoid/dbf');
+const { ActivityType } = require('discord.js');
 const ms = require('ms');
 const sync = require('../../lib/sync');
 const checkForUpdates = require('../../lib/updates');
@@ -91,6 +92,11 @@ module.exports = class extends Listener {
 					.replace(/{+guilds}+/gi, cached.guilds)
 					.replace(/{+openTickets}+/gi, cached.openTickets)
 					.replace(/{+totalTickets}+/gi, cached.totalTickets);
+				if (activity.type === ActivityType.Custom) {
+					// custom status (upstream #532): the text goes in `state`
+					activity.state = activity.name;
+					activity.name = 'Custom Status';
+				}
 				client.user.setPresence({
 					activities: [activity],
 					status: client.config.presence.status,
