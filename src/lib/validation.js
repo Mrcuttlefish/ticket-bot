@@ -141,6 +141,13 @@ const pingRoleRules = (value, field) => {
 	}));
 };
 
+const webhookUrl = (value, field) => {
+	const { checkWebhookURL } = require('./webhooks');
+	const result = checkWebhookURL(value);
+	if (!result.ok) throw new ValidationError(field, result.reason);
+	return result.url.href;
+};
+
 /** @type {Record<string, FieldSpec>} */
 const guildSettings = {
 	archive: { type: 'boolean' },
@@ -189,6 +196,15 @@ const guildSettings = {
 	ticketNumberOffset: {
 		options: { max: 1e9 },
 		type: 'int',
+	},
+	webhookSecret: {
+		nullable: true,
+		options: { max: 256 },
+		type: 'string',
+	},
+	webhookUrl: {
+		nullable: true,
+		type: webhookUrl,
 	},
 	workingHours: { type: workingHours },
 };

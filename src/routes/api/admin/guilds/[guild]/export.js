@@ -96,6 +96,8 @@ module.exports.get = fastify => ({
 		});
 
 		delete settings.id;
+		// encrypted with this bot's key, so it's useless elsewhere; the admin sets it again after importing
+		delete settings.webhookSecret;
 
 		settings.categories = settings.categories.map(c => {
 			delete c.guildId;
