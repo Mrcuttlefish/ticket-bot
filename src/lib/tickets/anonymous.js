@@ -2,9 +2,11 @@
  * Anonymous tickets: in categories with `anonymous` turned on, messages from staff are deleted and posted again
  * by the bot under a generic "Staff" name, so the ticket's creator can't see which staff member replied.
  *
- * The original message is archived first, with its real author, so staff (and admins reading transcripts or the
- * archive) can still see who wrote what. Things the creator can see are anonymised: transcripts they download,
- * the claim, release and close request messages, and the "closed by" field in the closing DM.
+ * Nobody can see who the staff member was through Discord, the portal or transcripts, staff and admins included.
+ * The real author is kept where only someone with access to the bot's server can read it, so abuse can still be
+ * traced: the archived message's author in the database, and a line in the bot's own log (console and log files).
+ * Anonymised: relayed messages, transcripts, the portal API, the log channel, the claim, release and close request
+ * messages, and the "closed by" field in the closing DM.
  *
  * Limits: Discord shows who used a slash command, and staff with access to the channel are listed in its member
  * list. Use the buttons rather than slash commands in anonymous tickets.
@@ -87,6 +89,8 @@ async function relayMessage(client, message, settings, getMessage) {
 			}
 			: undefined,
 	});
+	// the real author is only written to the bot's own log, never to Discord
+	client.log.info.tickets(`Anonymous message ${message.id} in ticket ${message.channel.id} was sent by ${message.author.tag} (${message.author.id})`);
 	// the archived original must not be marked as deleted
 	client.tickets.$relayed.add(message.id);
 	await message.delete().catch(error => {

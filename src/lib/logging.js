@@ -166,6 +166,8 @@ async function logTicketEvent(client, {
 	};
 	client.log.info.tickets(`${member.user.tag} ${client.i18n.getMessage('en-GB', `log.ticket.verb.${action}`)} ticket ${target.id}`);
 	if (!ticket.guild.logChannel) return;
+	// in anonymous tickets, the log channel shows "Staff"; the real name is only in the bot's own log (above)
+	const anonymous = ticket.category?.anonymous && userId !== ticket.createdById && userId !== client.user.id;
 	const channel = guildChannel(client, ticket.guild.id, ticket.guild.logChannel);
 	if (!channel) return;
 	const colour = action === 'create'
@@ -175,17 +177,20 @@ async function logTicketEvent(client, {
 					? 'LuminousVividPink' : action === 'unclaim'
 						? 'DarkVividPink' : 'Default';
 	const getMessage = client.i18n.getLocale(ticket.guild.locale);
+	const staffName = getMessage('ticket.anonymous.staff');
 	const i18nOptions = {
-		user: `<@${member.user.id}>`,
+		user: anonymous ? staffName : `<@${member.user.id}>`,
 		verb: getMessage(`log.ticket.verb.${action}`),
 	};
 	const embeds = [
 		new EmbedBuilder()
 			.setColor(colour)
-			.setAuthor({
-				iconURL: member.displayAvatarURL(),
-				name: member.displayName,
-			})
+			.setAuthor(anonymous
+				? { name: staffName }
+				: {
+					iconURL: member.displayAvatarURL(),
+					name: member.displayName,
+				})
 			.setTitle(getMessage('log.ticket.title', i18nOptions))
 			.setDescription(getMessage('log.ticket.description', i18nOptions))
 			.addFields([
@@ -230,8 +235,11 @@ async function logMessageEvent(client, {
 		? 'Purple' : action === 'delete'
 			? 'DarkPurple' : 'Default';
 	const getMessage = client.i18n.getLocale(ticket.guild.locale);
+	// in anonymous tickets, staff are "Staff" in the log channel; the real name is only in the bot's own log (above)
+	const hide = id => Boolean(ticket.category?.anonymous && id && id !== ticket.createdById && id !== client.user.id);
+	const staffName = getMessage('ticket.anonymous.staff');
 	const i18nOptions = {
-		user: `<@${executor?.user.id}>`,
+		user: hide(executor?.user.id) ? staffName : `<@${executor?.user.id}>`,
 		verb: getMessage(`log.message.verb.${action}`),
 	};
 	const channel = guildChannel(client, ticket.guild.id, ticket.guild.logChannel);
@@ -239,10 +247,12 @@ async function logMessageEvent(client, {
 	const embeds = [
 		new EmbedBuilder()
 			.setColor(colour)
-			.setAuthor({
-				iconURL: target.member?.displayAvatarURL() || 'https://discord.com/assets/1f0bfc0865d324c2587920a7d80c609b.png',
-				name: target.member?.displayName || 'Unknown',
-			})
+			.setAuthor(hide(target.member?.id ?? target.author?.id)
+				? { name: staffName }
+				: {
+					iconURL: target.member?.displayAvatarURL() || 'https://discord.com/assets/1f0bfc0865d324c2587920a7d80c609b.png',
+					name: target.member?.displayName || 'Unknown',
+				})
 			.setTitle(getMessage('log.message.title', i18nOptions))
 			.setDescription(getMessage('log.message.description', i18nOptions))
 			.addFields([

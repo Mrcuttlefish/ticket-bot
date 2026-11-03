@@ -11,9 +11,7 @@ module.exports.get = fastify => ({
 		const client = req.routeOptions.config.client;
 		const found = await findViewableTicket(req, res);
 		if (!found) return;
-		const {
-			staff, ticket,
-		} = found;
+		const { ticket } = found;
 
 		res.hijack();
 		res.raw.writeHead(200, {
@@ -43,7 +41,7 @@ module.exports.get = fastify => ({
 					}),
 				]);
 				if (!row || !fresh) return;
-				const [message] = await serializeMessages(client, fresh, [row], staff);
+				const [message] = await serializeMessages(client, fresh, [row]);
 				send('message', message);
 			} catch (error) {
 				client.log.error.http(error);

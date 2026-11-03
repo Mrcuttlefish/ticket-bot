@@ -54,7 +54,7 @@ module.exports.get = fastify => ({
 		let next = null;
 		if (q && where.number === undefined) {
 			// topics are encrypted, so a text search decrypts the most recent 500 matching tickets
-			const candidates = await Promise.all((await findMany({ take: 500 })).map(t => serializeTicket(t, staff)));
+			const candidates = await Promise.all((await findMany({ take: 500 })).map(t => serializeTicket(t)));
 			const matches = candidates.filter(t => t.topic?.toLowerCase().includes(q));
 			const start = query.cursor ? matches.findIndex(t => t.id === query.cursor) + 1 : 0;
 			tickets = matches.slice(start, start + limit);
@@ -71,7 +71,7 @@ module.exports.get = fastify => ({
 				rows.length = limit;
 				next = rows[rows.length - 1].id;
 			}
-			tickets = await Promise.all(rows.map(t => serializeTicket(t, staff)));
+			tickets = await Promise.all(rows.map(t => serializeTicket(t)));
 		}
 
 		return {

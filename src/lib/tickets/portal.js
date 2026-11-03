@@ -5,7 +5,8 @@
  * Who can see what:
  * - staff (see users.js `isStaff`) can see every ticket in the guild
  * - anyone else can only see tickets they created
- * - in anonymous categories (anonymous.js), staff authors are shown as a fixed "Staff" author to non-staff
+ * - in anonymous categories (anonymous.js), staff authors are shown as a fixed "Staff" author to everyone, staff
+ *   included; the real author is only in the database (and the bot's log files)
  */
 
 const { EventEmitter } = require('node:events');
@@ -14,7 +15,7 @@ const { pools } = require('../threads');
 
 const { crypto } = pools;
 
-/** the author shown instead of staff in anonymous tickets, for viewers who aren't staff */
+/** the author shown instead of staff in anonymous tickets */
 const STAFF_AUTHOR = Object.freeze({
 	avatar: null,
 	bot: false,
@@ -134,11 +135,10 @@ const serializeCategory = category => (category
 
 /**
  * @param {object} ticket a ticket row with `category`
- * @param {boolean} staff whether the viewer is staff (in anonymous tickets, other viewers see staff as "0")
- * @returns {Promise<object>}
+ * @returns {Promise<object>} in anonymous tickets, staff are "0"
  */
-async function serializeTicket(ticket, staff) {
-	const hide = id => (id && ticket.category?.anonymous && !staff && id !== ticket.createdById ? STAFF_AUTHOR.id : id);
+async function serializeTicket(ticket) {
+	const hide = id => (id && ticket.category?.anonymous && id !== ticket.createdById ? STAFF_AUTHOR.id : id);
 	return {
 		category: serializeCategory(ticket.category),
 		claimedById: hide(ticket.claimedById) ?? null,
@@ -234,10 +234,9 @@ async function refreshAttachments(client, attachments) {
  * @param {import('client')} client
  * @param {object} ticket a ticket row with `category`, `archivedUsers` and `archivedRoles`
  * @param {object[]} messages archived message rows
- * @param {boolean} staff whether the viewer is staff
  * @returns {Promise<object[]>}
  */
-async function serializeMessages(client, ticket, messages, staff) {
+async function serializeMessages(client, ticket, messages) {
 	const roles = new Map(ticket.archivedRoles.map(r => [r.roleId, r]));
 	const users = new Map(await Promise.all(ticket.archivedUsers.map(async u => [u.userId, {
 		avatar: u.avatar,
@@ -247,7 +246,7 @@ async function serializeMessages(client, ticket, messages, staff) {
 		roleColour: roles.get(u.roleId)?.colour ? `#${roles.get(u.roleId).colour}` : null,
 		username: await decrypt(u.username),
 	}])));
-	const hideStaff = ticket.category?.anonymous && !staff;
+	const hideStaff = ticket.category?.anonymous;
 
 	const serialized = await Promise.all(messages.map(async message => {
 		let content = {};
