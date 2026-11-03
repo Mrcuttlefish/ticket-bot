@@ -17,12 +17,18 @@ buttons:
   create:
     emoji: 🎫
     text: Create a ticket
+  delete:
+    emoji: 🗑️
+    text: Delete
   edit:
     emoji: ✏️
     text: Edit
   reject_close_request:
     emoji: ✖️
     text: Reject
+  reopen:
+    emoji: 🔓
+    text: Reopen
   transcript:
     emoji: 📄
     text: Transcript
@@ -173,6 +179,9 @@ commands:
     release:
       description: Release (unclaim) a ticket
       name: release
+    reopen:
+      description: Reopen a closed ticket
+      name: reopen
     remove:
       description: Remove a member from a ticket
       name: remove
@@ -351,6 +360,8 @@ log:
       claim: claimed
       close: closed
       create: created
+      delete: deleted
+      reopen: reopened
       unclaim: released
       update: updated
 menus:
@@ -409,6 +420,15 @@ misc:
   not_ticket:
     description: You can only use this command in tickets.
     title: ❌ This isn't a ticket channel
+  staff_only:
+    description: Only staff members can do that.
+    title: ❌ Staff only
+  ticket_closed:
+    description: This ticket is closed. Reopen it first.
+    title: ❌ This ticket is closed
+  ticket_open:
+    description: This ticket is still open.
+    title: ❌ This ticket isn't closed
   permissions_error:
     description: Sorry, the operation failed due to insufficient permissions.
     fields:
@@ -455,10 +475,12 @@ ticket:
     staff: Staff
   answers:
     no_value: "*No response*"
+  already_claimed: ❌ {user} has already claimed this ticket.
   claimed: 🙌 {user} has claimed this ticket.
   close:
     closed:
       description: This channel will be deleted in a few seconds…
+      description_kept: This ticket will be closed in a few seconds…
       title: ✅ Ticket closed
     forbidden:
       description: You don't have permission to close this ticket.
@@ -481,9 +503,16 @@ ticket:
       This ticket will be closed due to inactivity <t:{timestamp}:R>.
       Send a message to cancel this automation.
     title: ⌛ This ticket will be closed soon
+  closed_kept:
+    delete_at: This channel will be deleted <t:{timestamp}:R>.
+    description: |
+      {user} closed this ticket.
+      Staff can reopen it, save a transcript, or delete the channel.
+    title: 🔒 Ticket closed
   created:
     description: "Your ticket channel has been created: {channel}."
     title: ✅ Ticket created
+  deleting: 🗑️ This channel will be deleted in a few seconds…
   edited:
     description: Your changes have been saved.
     title: ✅ Ticket updated
@@ -514,7 +543,10 @@ ticket:
       number: Number
       topic: Topic
     title: ℹ️ Reference
+  release_locked: ❌ Only {user}, who claimed this ticket, can release it.
   released: ♻️ {user} has released this ticket.
+  reopened: 🔓 {user} reopened this ticket.
+  transcript_saved: 📄 Transcript of {ticket}, closed by {user}
   suggestions:
     buttons:
       continue: Open a ticket anyway

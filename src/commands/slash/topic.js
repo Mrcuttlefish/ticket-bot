@@ -42,6 +42,7 @@ module.exports = class TopicSlashCommand extends SlashCommand {
 						locale: true,
 					},
 				},
+				open: true,
 				questionAnswers: { include: { question: true } },
 				topic: true,
 			},
@@ -65,6 +66,7 @@ module.exports = class TopicSlashCommand extends SlashCommand {
 			});
 		}
 
+		if (!ticket.open) return await client.tickets.replyClosed(interaction, ticket);
 		const getMessage = client.i18n.getLocale(ticket.guild.locale);
 
 		// members who were added to the ticket can't change its topic (upstream #508)

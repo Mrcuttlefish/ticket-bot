@@ -9,6 +9,7 @@ const {
 	sendToHouston,
 } = require('../../lib/stats');
 const handleStaleTickets = require('../../lib/stale');
+const { deleteExpiredChannels } = require('../../lib/tickets/closed');
 const { syncIcons } = require('../../lib/icons');
 
 module.exports = class extends Listener {
@@ -131,6 +132,11 @@ module.exports = class extends Listener {
 			checkForUpdates(client);
 			setInterval(() => checkForUpdates(client), ms('1w'));
 		}
+
+		// delete the kept channels of closed tickets when their time is up (categories' keepClosedFor)
+		const sweep = () => deleteExpiredChannels(client).catch(error => client.log.error(error));
+		sweep();
+		setInterval(sweep, ms('1m'));
 
 		if (process.env.PUBLIC_BOT === 'true') {
 			client.log.notice('Inactivity warnings and auto-close features are disabled');

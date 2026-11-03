@@ -24,6 +24,8 @@ module.exports = class CloseButton extends Button {
 			await client.tickets.beforeRequestClose(interaction);
 		} else {
 			const ticket = await client.tickets.getTicket(interaction.channel.id, true); // true to override cache and load new feedback
+			if (!ticket) return await client.tickets.replyError(interaction, null, 'not_ticket');
+			if (!ticket.open) return await client.tickets.replyClosed(interaction, ticket);
 			const getMessage = client.i18n.getLocale(ticket.guild.locale);
 			const staff = await isStaff(interaction.guild, interaction.user.id);
 

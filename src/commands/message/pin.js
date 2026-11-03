@@ -44,6 +44,7 @@ module.exports = class PinMessageCommand extends MessageCommand {
 			});
 		}
 
+		if (!ticket.open) return await client.tickets.replyClosed(interaction, ticket);
 		const getMessage = client.i18n.getLocale(ticket.guild.locale);
 
 		if (!interaction.targetMessage.pinnable) {

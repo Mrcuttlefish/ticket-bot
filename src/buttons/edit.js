@@ -32,9 +32,11 @@ module.exports = class EditButton extends Button {
 				guild: {
 					select: {
 						errorColour: true,
+						footer: true,
 						locale: true,
 					},
 				},
+				open: true,
 				questionAnswers: { include: { question: true } },
 				topic: true,
 			},
@@ -42,6 +44,7 @@ module.exports = class EditButton extends Button {
 		});
 
 		if (!ticket) return;
+		if (!ticket.open) return await client.tickets.replyClosed(interaction, ticket);
 		const getMessage = client.i18n.getLocale(ticket.guild.locale);
 
 		// only the creator can change their answers, not other members or staff (upstream #508);

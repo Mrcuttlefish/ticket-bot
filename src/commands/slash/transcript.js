@@ -12,6 +12,7 @@ const ExtendedEmbedBuilder = require('../../lib/embed');
 const { formatChannelName } = require('../../lib/tickets/placeholders');
 const { pools } = require('../../lib/threads');
 const { anonymiseTranscript } = require('../../lib/tickets/anonymous');
+const { TRANSCRIPT_INCLUDE } = require('../../lib/tickets/transcript-file');
 
 const { transcript: pool } = pools;
 
@@ -130,22 +131,7 @@ module.exports = class TranscriptSlashCommand extends SlashCommand {
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		ticketId = ticketId || interaction.options.getString('ticket', true);
 		const ticket = await client.prisma.ticket.findUnique({
-			include: {
-				archivedChannels: true,
-				archivedMessages: {
-					orderBy: { createdAt: 'asc' },
-					where: { external: false },
-				},
-				archivedRoles: true,
-				archivedUsers: true,
-				category: true,
-				claimedBy: true,
-				closedBy: true,
-				createdBy: true,
-				feedback: true,
-				guild: true,
-				questionAnswers: { include: { question: true } },
-			},
+			include: TRANSCRIPT_INCLUDE,
 			where: interaction.guildId && ticketId.length < 16
 				? {
 					guildId_number: {

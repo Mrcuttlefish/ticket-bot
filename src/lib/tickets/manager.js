@@ -41,6 +41,14 @@ const {
 } = require('../stats');
 const { pools } = require('../threads');
 const { buttonEmoji } = require('../icons');
+const { guildChannel } = require('../logging');
+const {
+	buildClosedControls, getChannelDeleteAt, keepsClosedChannels, lockChannel, unlockChannel,
+} = require('./closed');
+const {
+	buildTranscriptAttachment, transcriptTargets,
+} = require('./transcript-file');
+const { PermissionsBitField } = require('discord.js');
 
 const { crypto } = pools;
 
@@ -531,6 +539,7 @@ module.exports = class TicketManager {
 				}
 				: null,
 			image: category.image,
+			style: category.openingStyle,
 			v2: category.guild.componentsV2,
 		}));
 
@@ -783,6 +792,73 @@ module.exports = class TicketManager {
 	/**
 	 * @param {import("discord.js").ChatInputCommandInteraction|import("discord.js").ButtonInteraction} interaction
 	 */
+	/**
+	 * Reply (ephemerally) that a ticket is closed, or that the channel isn't a ticket.
+	 * @param {import("discord.js").RepliableInteraction} interaction
+	 * @param {object | null} ticket
+	 * @param {string} [key] the misc.* message
+	 */
+	async replyError(interaction, ticket, key) {
+		const settings = ticket?.guild ?? await this.client.prisma.guild.findUnique({ where: { id: interaction.guild.id } });
+		const getMessage = this.client.i18n.getLocale(settings?.locale);
+		const payload = {
+			embeds: [
+				new ExtendedEmbedBuilder({
+					iconURL: interaction.guild.iconURL(),
+					text: settings?.footer,
+				})
+					.setColor(settings?.errorColour ?? 'Red')
+					.setTitle(getMessage(`misc.${key}.title`))
+					.setDescription(getMessage(`misc.${key}.description`)),
+			],
+			flags: MessageFlags.Ephemeral,
+		};
+		if (interaction.deferred || interaction.replied) return await interaction.editReply(payload);
+		return await interaction.reply(payload);
+	}
+
+	/**
+	 * @param {import("discord.js").RepliableInteraction} interaction
+	 * @param {object} ticket
+	 */
+	async replyClosed(interaction, ticket) {
+		return await this.replyError(interaction, ticket, 'ticket_closed');
+	}
+
+	/**
+	 * Whether a member is staff for a ticket's category (or can manage the server).
+	 * @param {import("discord.js").GuildMember} member
+	 * @param {object} category
+	 * @returns {boolean}
+	 */
+	isCategoryStaff(member, category) {
+		if (this.client.supers.includes(member.id)) return true;
+		if (member.permissions.has(PermissionsBitField.Flags.ManageGuild)) return true;
+		return (category?.staffRoles ?? []).some(role => member.roles.cache.has(role));
+	}
+
+	/**
+	 * The channel name for a ticket, from a template.
+	 * @param {string} template
+	 * @param {object} ticket with category
+	 * @param {import("discord.js").Guild} guild
+	 * @param {import("discord.js").User} [claimer]
+	 * @returns {Promise<string>}
+	 */
+	async ticketChannelName(template, ticket, guild, claimer) {
+		const creator = await guild.members.fetch(ticket.createdById).catch(() => null);
+		return formatChannelName(template, {
+			// a claimer's name in the channel name would reveal who is answering an anonymous ticket
+			claimer: claimer && (ticket.category?.anonymous ? 'staff' : claimer.username),
+			displayName: creator?.displayName ?? 'unknown',
+			number: ticket.number,
+			username: creator?.user.username ?? 'unknown',
+		});
+	}
+
+	/**
+	 * @param {import("discord.js").ChatInputCommandInteraction|import("discord.js").ButtonInteraction} interaction
+	 */
 	async claim(interaction) {
 		const ticket = await this.client.prisma.ticket.findUnique({
 			include: {
@@ -792,6 +868,8 @@ module.exports = class TicketManager {
 			},
 			where: { id: interaction.channel.id },
 		});
+		if (!ticket) return await this.replyError(interaction, null, 'not_ticket');
+		if (!ticket.open) return await this.replyClosed(interaction, ticket);
 		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
 
 		if (!(await isStaff(interaction.guild, interaction.user.id))) { // if user is not staff
@@ -809,11 +887,28 @@ module.exports = class TicketManager {
 			});
 		}
 
+		const previous = ticket.claimedById;
+		// a claimed ticket can only be taken over if the category allows it
+		if (previous && (previous === interaction.user.id || !ticket.category.claimTakeover)) {
+			return await interaction.reply({
+				embeds: [
+					new ExtendedEmbedBuilder()
+						.setColor(ticket.guild.errorColour)
+						.setDescription(getMessage('ticket.already_claimed', { user: ticket.category.anonymous && previous !== interaction.user.id ? getMessage('ticket.anonymous.staff') : `<@${previous}>` })),
+				],
+				flags: MessageFlags.Ephemeral,
+			});
+		}
+
 		await interaction.deferReply();
 
+		const reason = `Ticket claimed by ${interaction.user.tag}`;
 		await Promise.all([
-			interaction.channel.permissionOverwrites.edit(interaction.user, { 'ViewChannel': true }, `Ticket claimed by ${interaction.user.tag}`),
-			...ticket.category.staffRoles.map(role => interaction.channel.permissionOverwrites.edit(role, { 'ViewChannel': false }, `Ticket claimed by ${interaction.user.tag}`)),
+			interaction.channel.permissionOverwrites.edit(interaction.user, { 'ViewChannel': true }, { reason }),
+			// the previous claimer (when taking over) loses their claim, and the access that came with it
+			previous && interaction.channel.permissionOverwrites.delete(previous, reason).catch(() => null),
+			// by default, a claimed ticket is hidden from the rest of the staff
+			...(ticket.category.claimHide ? ticket.category.staffRoles : []).map(role => interaction.channel.permissionOverwrites.edit(role, { 'ViewChannel': false }, { reason })),
 			this.client.prisma.ticket.update({
 				data: {
 					claimedBy: {
@@ -827,7 +922,7 @@ module.exports = class TicketManager {
 			}),
 		]);
 
-		const openingMessage = await interaction.channel.messages.fetch(ticket.openingMessageId);
+		const openingMessage = await interaction.channel.messages.fetch(ticket.openingMessageId).catch(() => null);
 
 		if (openingMessage && openingMessage.components.length !== 0) {
 			const categorySettings = resolveCategorySettings(ticket.guild, ticket.category);
@@ -847,6 +942,9 @@ module.exports = class TicketManager {
 			],
 		});
 
+		// after replying: renames can be rate limited by Discord (2 per 10 minutes) and wait a long time
+		await this.applyClaimedChannel(interaction.channel, ticket, interaction.user, reason);
+
 		logTicketEvent(this.client, {
 			action: 'claim',
 			target: {
@@ -855,6 +953,41 @@ module.exports = class TicketManager {
 			},
 			userId: interaction.user.id,
 		});
+	}
+
+	/**
+	 * Rename and/or move a ticket's channel when it's claimed, or put it back when it's released.
+	 * Failures (e.g. Discord's limit of 2 renames per 10 minutes) don't stop the claim.
+	 * @param {import("discord.js").TextChannel} channel
+	 * @param {object} ticket with category
+	 * @param {import("discord.js").User | null} claimer null when released
+	 * @param {string} reason
+	 */
+	async applyClaimedChannel(channel, ticket, claimer, reason) {
+		const { category } = ticket;
+		try {
+			if (category.claimedChannelName) {
+				const name = await this.ticketChannelName(claimer ? category.claimedChannelName : category.channelName, ticket, channel.guild, claimer);
+				if (name && name !== channel.name) await channel.setName(name, reason);
+			}
+			if (category.claimedCategory) {
+				let parent = null;
+				if (claimer) {
+					const target = channel.guild.channels.cache.get(category.claimedCategory); // only categories in this server
+					if (target?.type === ChannelType.GuildCategory && target.children.cache.size < 50) parent = target.id;
+				} else if (channel.parentId === category.claimedCategory) {
+					parent = this.pickDiscordCategory(channel.guild, category);
+				}
+				if (parent && parent !== channel.parentId) {
+					await channel.setParent(parent, {
+						lockPermissions: false,
+						reason,
+					});
+				}
+			}
+		} catch (error) {
+			this.client.log.warn(`Failed to update the channel of ticket ${ticket.id} after it was ${claimer ? 'claimed' : 'released'}`, error);
+		}
 	}
 
 	/**
@@ -869,6 +1002,8 @@ module.exports = class TicketManager {
 			},
 			where: { id: interaction.channel.id },
 		});
+		if (!ticket) return await this.replyError(interaction, null, 'not_ticket');
+		if (!ticket.open) return await this.replyClosed(interaction, ticket);
 		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
 
 		if (!(await isStaff(interaction.guild, interaction.user.id))) { // if user is not staff
@@ -886,18 +1021,33 @@ module.exports = class TicketManager {
 			});
 		}
 
+		const claimer = ticket.claimedById;
+		const canOverride = this.client.supers.includes(interaction.user.id) || interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+		if (ticket.category.claimReleaseLocked && claimer && claimer !== interaction.user.id && !canOverride) {
+			return await interaction.reply({
+				embeds: [
+					new ExtendedEmbedBuilder()
+						.setColor(ticket.guild.errorColour)
+						.setDescription(getMessage('ticket.release_locked', { user: ticket.category.anonymous ? getMessage('ticket.anonymous.staff') : `<@${claimer}>` })),
+				],
+				flags: MessageFlags.Ephemeral,
+			});
+		}
+
 		await interaction.deferReply();
 
+		const reason = `Ticket released by ${interaction.user.tag}`;
 		await Promise.all([
-			interaction.channel.permissionOverwrites.delete(interaction.user, `Ticket released by ${interaction.user.tag}`),
-			...ticket.category.staffRoles.map(role => interaction.channel.permissionOverwrites.edit(role, { 'ViewChannel': true }, `Ticket released by ${interaction.user.tag}`)),
+			// remove the claimer's access (it used to remove the access of whoever released it, even if they weren't the claimer)
+			interaction.channel.permissionOverwrites.delete(claimer ?? interaction.user, reason).catch(() => null),
+			...ticket.category.staffRoles.map(role => interaction.channel.permissionOverwrites.edit(role, { 'ViewChannel': true }, { reason })),
 			this.client.prisma.ticket.update({
 				data: { claimedBy: { disconnect: true } },
 				where: { id: interaction.channel.id },
 			}),
 		]);
 
-		const openingMessage = await interaction.channel.messages.fetch(ticket.openingMessageId);
+		const openingMessage = await interaction.channel.messages.fetch(ticket.openingMessageId).catch(() => null);
 
 		if (openingMessage && openingMessage.components.length !== 0) {
 			const categorySettings = resolveCategorySettings(ticket.guild, ticket.category);
@@ -917,6 +1067,9 @@ module.exports = class TicketManager {
 			],
 		});
 
+		// after replying: renames can be rate limited by Discord (2 per 10 minutes) and wait a long time
+		if (claimer) await this.applyClaimedChannel(interaction.channel, ticket, null, reason);
+
 		logTicketEvent(this.client, {
 			action: 'unclaim',
 			target: {
@@ -925,6 +1078,113 @@ module.exports = class TicketManager {
 			},
 			userId: interaction.user.id,
 		});
+	}
+
+	/**
+	 * Load a closed ticket in a kept channel for /reopen and the Reopen and Delete buttons, and check the member is
+	 * staff for its category. Replies and returns null if not.
+	 * @param {import("discord.js").ChatInputCommandInteraction|import("discord.js").ButtonInteraction} interaction
+	 */
+	async getClosedTicketFor(interaction) {
+		const ticket = await this.client.prisma.ticket.findUnique({
+			include: {
+				category: true,
+				guild: true,
+			},
+			where: { id: interaction.channel.id },
+		});
+		if (!ticket || ticket.guildId !== interaction.guild.id) {
+			await this.replyError(interaction, null, 'not_ticket');
+			return null;
+		}
+		if (!this.isCategoryStaff(interaction.member, ticket.category)) {
+			await this.replyError(interaction, ticket, 'staff_only');
+			return null;
+		}
+		if (ticket.open) {
+			await this.replyError(interaction, ticket, 'ticket_open');
+			return null;
+		}
+		return ticket;
+	}
+
+	/**
+	 * Reopen a closed ticket whose channel was kept.
+	 * @param {import("discord.js").ChatInputCommandInteraction|import("discord.js").ButtonInteraction} interaction
+	 */
+	async reopen(interaction) {
+		const ticket = await this.getClosedTicketFor(interaction);
+		if (!ticket) return;
+		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
+		await interaction.deferReply();
+
+		await this.client.prisma.ticket.update({
+			data: {
+				channelDeleteAt: null,
+				closedAt: null,
+				closedBy: ticket.closedById ? { disconnect: true } : undefined,
+				closedReason: null,
+				lastMessageAt: new Date(), // so it isn't immediately stale again
+				open: true,
+			},
+			where: { id: ticket.id },
+		});
+		await this.getTicket(ticket.id, true);
+		this.$count.categories[ticket.categoryId] = {}; // recount the open tickets
+
+		await unlockChannel(interaction.channel, ticket.createdById, `Ticket reopened by ${interaction.user.tag}`);
+
+		// the buttons on the "ticket closed" message no longer apply
+		if (interaction.isButton?.()) await interaction.message?.edit({ components: [] }).catch(() => null);
+
+		await interaction.editReply({
+			embeds: [
+				new ExtendedEmbedBuilder()
+					.setColor(ticket.guild.successColour)
+					.setDescription(getMessage('ticket.reopened', { user: ticket.category?.anonymous ? getMessage('ticket.anonymous.staff') : interaction.user.toString() })),
+			],
+		});
+
+		logTicketEvent(this.client, {
+			action: 'reopen',
+			target: {
+				id: ticket.id,
+				name: interaction.channel.toString(),
+			},
+			userId: interaction.user.id,
+		});
+	}
+
+	/**
+	 * Delete the kept channel of a closed ticket. The ticket and its archive stay in the database.
+	 * @param {import("discord.js").ChatInputCommandInteraction|import("discord.js").ButtonInteraction} interaction
+	 */
+	async deleteClosed(interaction) {
+		const ticket = await this.getClosedTicketFor(interaction);
+		if (!ticket) return;
+		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
+		await interaction.reply({
+			embeds: [
+				new ExtendedEmbedBuilder()
+					.setColor(ticket.guild.errorColour)
+					.setDescription(getMessage('ticket.deleting')),
+			],
+		});
+		if (interaction.isButton?.()) await interaction.message?.edit({ components: [] }).catch(() => null);
+		await this.client.prisma.ticket.update({
+			data: { channelDeleteAt: null },
+			where: { id: ticket.id },
+		});
+		await logTicketEvent(this.client, {
+			action: 'delete',
+			target: {
+				id: ticket.id,
+				name: `${ticket.category?.name} **#${ticket.number}**`,
+			},
+			userId: interaction.user.id,
+		}).catch(error => this.client.log.error(error));
+		await new Promise(resolve => setTimeout(resolve, this.closeDelay));
+		if (interaction.channel.deletable) await interaction.channel.delete(`Closed ticket deleted by ${interaction.user.tag}`);
 	}
 
 	buildFeedbackModal(locale, id) {
@@ -995,6 +1255,7 @@ module.exports = class TicketManager {
 		}
 
 		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
+		if (!ticket.open) return await this.replyClosed(interaction, ticket);
 		const staff = await isStaff(interaction.guild, interaction.user.id);
 		const reason = interaction.options?.getString('reason', false) || null; // ?. because it could be a button interaction
 
@@ -1139,7 +1400,7 @@ module.exports = class TicketManager {
 				})
 					.setColor(ticket.guild.successColour)
 					.setTitle(getMessage('ticket.close.closed.title'))
-					.setDescription(getMessage('ticket.close.closed.description')),
+					.setDescription(getMessage(keepsClosedChannels(ticket.category) ? 'ticket.close.closed.description_kept' : 'ticket.close.closed.description')),
 			],
 		});
 		await new Promise(resolve => setTimeout(resolve, this.closeDelay));
@@ -1154,7 +1415,8 @@ module.exports = class TicketManager {
 		closedBy = null,
 		reason = null,
 	}) {
-		let ticket = await this.getTicket(ticketId);
+		let ticket = await this.getTicket(ticketId, true);
+		if (!ticket?.open) return; // already closed (e.g. a close request accepted twice)
 		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
 
 		const { _count: { archivedMessages } } = await this.client.prisma.ticket.findUnique({
@@ -1183,6 +1445,10 @@ module.exports = class TicketManager {
 			data.pinnedMessageIds = [...pinned.keys()];
 		}
 
+		// some categories keep the channel after closing (until it's deleted, or for a while)
+		const keep = Boolean(channel) && keepsClosedChannels(ticket.category);
+		data.channelDeleteAt = keep ? getChannelDeleteAt(data.closedAt, ticket.category.keepClosedFor) : null;
+
 		try {
 			ticket = await this.client.prisma.ticket.update({
 				data,
@@ -1194,6 +1460,7 @@ module.exports = class TicketManager {
 				where: { id: ticket.id },
 			});
 			if (this.$stale.has(ticketId)) this.$stale.delete(ticketId);
+			await this.getTicket(ticketId, true); // update the cache so the ticket is seen as closed
 			getPortalEvents(this.client).emit('ticket-closed', { ticketId });
 			this.$count.categories[ticket.categoryId] ??= {};
 			this.$count.categories[ticket.categoryId].total -= 1;
@@ -1204,16 +1471,75 @@ module.exports = class TicketManager {
 		}
 
 		const guild = this.client.guilds.cache.get(ticket.guildId);
+		const categorySettings = resolveCategorySettings(ticket.guild, ticket.category);
+		const closerMember = closedBy ? guild?.members.cache.get(closedBy) : null;
+		// the parentheses matter: without them the audit log reason was always ": <reason>" (or ": null")
+		const auditReason = 'Ticket closed' + (closerMember ? ` by ${closerMember.displayName}` : '') + (reason ? `: ${reason}` : '');
+		// in anonymous tickets the creator (and the transcript channel) isn't told which staff member closed it
+		const closerName = !ticket.closedById
+			? this.client.user.toString()
+			: ticket.category?.anonymous && ticket.closedById !== ticket.createdById
+				? getMessage('ticket.anonymous.staff')
+				: `<@${ticket.closedById}>`;
 
-		if (channel?.deletable) {
-			const member = closedBy ? channel.guild.members.cache.get(closedBy) : null;
-			// the parentheses matter: without them the audit log reason was always ": <reason>" (or ": null")
-			await channel.delete('Ticket closed' + (member ? ` by ${member.displayName}` : '') + (reason ? `: ${reason}` : ''));
+		if (keep) {
+			try {
+				await lockChannel(channel, auditReason);
+				const embed = new ExtendedEmbedBuilder({
+					iconURL: guild.iconURL(),
+					text: ticket.guild.footer,
+				})
+					.setColor(ticket.guild.primaryColour)
+					.setTitle(getMessage('ticket.closed_kept.title'))
+					.setDescription(
+						getMessage('ticket.closed_kept.description', { user: closerName }) +
+						(ticket.channelDeleteAt ? '\n' + getMessage('ticket.closed_kept.delete_at', { timestamp: Math.floor(ticket.channelDeleteAt / 1000) }) : ''),
+					);
+				if (reason) {
+					embed.addFields({
+						name: getMessage('dm.closed.fields.reason'),
+						value: reason,
+					});
+				}
+				await channel.send({
+					components: [buildClosedControls(getMessage, {
+						ticketId: ticket.id,
+						transcript: categorySettings.archive,
+					})],
+					embeds: [embed],
+				});
+			} catch (error) {
+				this.client.log.error(`Failed to lock the channel of closed ticket ${ticket.id}`, error);
+			}
+		} else if (channel?.deletable) {
+			await channel.delete(auditReason);
+		}
+
+		// HTML transcripts for the transcript channel and/or the closed DM
+		const targets = transcriptTargets(categorySettings, ticket.guild);
+		let transcriptFile = null;
+		if (targets.channel || targets.dm) {
+			try {
+				transcriptFile = await buildTranscriptAttachment(this.client, ticket.id);
+			} catch (error) {
+				this.client.log.error(`Failed to create the transcript of ticket ${ticket.id}`, error);
+			}
+		}
+		if (transcriptFile && targets.channel) {
+			const transcriptChannel = guildChannel(this.client, ticket.guildId, ticket.guild.transcriptChannel);
+			await transcriptChannel?.send({
+				allowedMentions: { parse: [] },
+				content: getMessage('ticket.transcript_saved', {
+					ticket: `${ticket.category.name} **#${ticket.number}**`,
+					user: closerName,
+				}),
+				files: [transcriptFile],
+			}).catch(error => this.client.log.warn(`Failed to post the transcript of ticket ${ticket.id}`, error));
 		}
 
 		const components = [];
 
-		if (resolveCategorySettings(ticket.guild, ticket.category).archive) {
+		if (categorySettings.archive) {
 			components.push(
 				new ActionRowBuilder()
 					.addComponents(
@@ -1242,8 +1568,7 @@ module.exports = class TicketManager {
 			closedById: ticket.closedById && {
 				inline: true,
 				name: getMessage('dm.closed.fields.closed_by'),
-				// in anonymous tickets the creator isn't told which staff member closed it
-				value: ticket.category?.anonymous && ticket.closedById !== ticket.createdById ? getMessage('ticket.anonymous.staff') : `<@${ticket.closedById}>`,
+				value: closerName,
 			},
 			created: {
 				inline: true,
@@ -1298,6 +1623,7 @@ module.exports = class TicketManager {
 				await creator.send({
 					components,
 					embeds: [dmEmbed],
+					files: transcriptFile && targets.dm ? [transcriptFile] : [],
 				});
 			}
 		} catch (error) {

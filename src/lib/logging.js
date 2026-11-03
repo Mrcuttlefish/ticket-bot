@@ -71,6 +71,32 @@ function guildChannel(client, guildId, channelId) {
 }
 
 /**
+ * Whether an event should be sent to the log channel. Servers can leave events out (`logExclude`);
+ * everything is still written to the bot's own log.
+ * @param {string[] | null | undefined} logExclude
+ * @param {string} event e.g. "ticket.close", "message.delete" or "admin"
+ * @returns {boolean}
+ */
+function isLogged(logExclude, event) {
+	if (!Array.isArray(logExclude)) return true;
+	return !logExclude.includes(event) && !logExclude.includes(event.split('.')[0]);
+}
+
+/**
+ * @param {import("client")} client
+ * @param {string} guildId
+ * @param {string} event
+ * @returns {Promise<boolean>}
+ */
+async function shouldLog(client, guildId, event) {
+	const settings = await client.prisma.guild.findUnique({
+		select: { logExclude: true },
+		where: { id: guildId },
+	});
+	return isLogged(settings?.logExclude, event);
+}
+
+/**
  * @param {import("client")} client
  * @param {object} details
  * @param {string} details.guildId
@@ -85,6 +111,7 @@ async function logAdminEvent(client, {
 			footer: true,
 			locale: true,
 			logChannel: true,
+			logExclude: true,
 		},
 		where: { id: guildId },
 	});
@@ -92,7 +119,7 @@ async function logAdminEvent(client, {
 	const guild = client.guilds.cache.get(guildId);
 	const member = await guild.members.fetch(userId);
 	client.log.info.settings(`${member.user.tag} ${action}d ${target.type} ${target.id}`);
-	if (!settings.logChannel) return;
+	if (!settings.logChannel || !isLogged(settings.logExclude, 'admin')) return;
 	const colour = action === 'create'
 		? 'Green' : action === 'update'
 			? 'Orange' : action === 'delete'
@@ -166,6 +193,7 @@ async function logTicketEvent(client, {
 	};
 	client.log.info.tickets(`${member.user.tag} ${client.i18n.getMessage('en-GB', `log.ticket.verb.${action}`)} ticket ${target.id}`);
 	if (!ticket.guild.logChannel) return;
+	if (!(await shouldLog(client, ticket.guild.id, `ticket.${action}`))) return;
 	// in anonymous tickets, the log channel shows "Staff"; the real name is only in the bot's own log (above)
 	const anonymous = ticket.category?.anonymous && userId !== ticket.createdById && userId !== client.user.id;
 	const channel = guildChannel(client, ticket.guild.id, ticket.guild.logChannel);
@@ -175,7 +203,9 @@ async function logTicketEvent(client, {
 			? 'DarkAqua' : action === 'update'
 				? 'Purple' : action === 'claim'
 					? 'LuminousVividPink' : action === 'unclaim'
-						? 'DarkVividPink' : 'Default';
+						? 'DarkVividPink' : action === 'reopen'
+							? 'Green' : action === 'delete'
+								? 'DarkRed' : 'Default';
 	const getMessage = client.i18n.getLocale(ticket.guild.locale);
 	const staffName = getMessage('ticket.anonymous.staff');
 	const i18nOptions = {
@@ -231,6 +261,7 @@ async function logMessageEvent(client, {
 	if (executor === undefined) executor = target.member;
 	client.log.info.tickets(`${executor?.user.tag || 'Unknown'} ${client.i18n.getMessage('en-GB', `log.message.verb.${action}`)} message ${target.id}`);
 	if (!ticket.guild.logChannel) return;
+	if (!(await shouldLog(client, ticket.guild.id, `message.${action}`))) return;
 	const colour = action === 'update'
 		? 'Purple' : action === 'delete'
 			? 'DarkPurple' : 'Default';
@@ -278,6 +309,8 @@ async function logMessageEvent(client, {
 module.exports = {
 	getLogChannel,
 	getSUID,
+	guildChannel,
+	isLogged,
 	logAdminEvent,
 	logMessageEvent,
 	logTicketEvent,

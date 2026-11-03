@@ -35,10 +35,11 @@ function replaceNumber(template, number, avoid1488 = false) {
  * @returns {string}
  */
 function formatChannelName(template, {
-	displayName, number, username,
+	claimer, displayName, number, username,
 }) {
 	return replaceNumber(
 		template
+			.replace(/{+\s?claimer\s?}+/gi, claimer ?? '')
 			.replace(/{+\s?(user)?name\s?}+/gi, username)
 			.replace(/{+\s?(nick|display)(name)?\s?}+/gi, displayName),
 		number,

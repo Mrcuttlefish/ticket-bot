@@ -1,1 +1,0 @@
-import{l as o,Q as l,aa as m,ab as v,ac as y,ad as f,m as p,j as i,ae as T,U as A}from"./DOgNAR-V.js";import{B as R}from"./Yn3uzO7K.js";function E(d,_,e){var s;o&&(s=A,l());var r=new R(d);m(()=>{var a=_()??null;if(o){var c=y(s),h=c===T,u=a!==null;if(h!==u){var t=f();p(t),r.anchor=t,i(!1),r.ensure(a,a&&(n=>e(n,a))),i(!0);return}}r.ensure(a,a&&(n=>e(n,a)))},v)}export{E as c};

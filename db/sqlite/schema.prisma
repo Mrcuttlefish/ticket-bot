@@ -75,6 +75,11 @@ model Category {
   channelName        String
   claimButton        Boolean? // null: use the guild setting
   claiming           Boolean    @default(false)
+  claimHide          Boolean    @default(true) // hide claimed tickets from the rest of the staff
+  claimReleaseLocked Boolean    @default(false) // only the claimer (or a server manager) can release
+  claimTakeover      Boolean    @default(false) // staff can take over a ticket someone else claimed
+  claimedCategory    String? // Discord category to move claimed tickets to
+  claimedChannelName String? // channel name while claimed; null: keep the name
   closeButton        Boolean? // null: use the guild setting
   createdAt          DateTime   @default(now())
   cooldown           Int? // seconds
@@ -88,9 +93,11 @@ model Category {
   guildId            String
   id                 Int        @id @default(autoincrement())
   image              String?
+  keepClosedFor      Int? // seconds to keep the channel after closing; null: delete at close, 0: until deleted
   memberLimit        Int        @default(1)
   name               String
   openingMessage     String
+  openingStyle       String     @default("EMBED") // EMBED (or Components V2 if the guild uses it), TEXT, or OFF
   pingRoleRules      String     @default("[]") // [{ roles: [creator roles], ping: [roles to ping] }]
   pingRoles          String     @default("[]")
   questions          Question[]
@@ -140,11 +147,14 @@ model Guild {
   id                 String     @id
   locale             String     @default("en-GB")
   logChannel         String?
+  logExclude         String     @default("[]") // events not sent to the log channel
   primaryColour      String     @default("#009999")
   staleAfter         Int? // seconds
   successColour      String     @default("Green")
   tags               Tag[]
   ticketNumberOffset Int        @default(0)
+  transcriptChannel  String? // HTML transcripts are posted here when tickets close
+  transcriptDm       Boolean    @default(false) // attach the HTML transcript to the closed DM
   tickets            Ticket[]
   webhookSecret      String? // encrypted
   webhookUrl         String?
@@ -210,6 +220,7 @@ model Ticket {
   categoryId          Int?
   claimedBy           User?             @relation(name: "TicketsClaimedByUser", fields: [claimedById], references: [id])
   claimedById         String?
+  channelDeleteAt     DateTime? // when a kept closed channel is deleted
   closedAt            DateTime?
   closedBy            User?             @relation(name: "TicketsClosedByUser", fields: [closedById], references: [id])
   closedById          String?

@@ -1,0 +1,1 @@
+import{ax as a}from"./D2YrtNCE.js";a();
