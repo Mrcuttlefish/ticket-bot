@@ -1,0 +1,307 @@
+/**
+ * Server-side validation for admin API request bodies.
+ *
+ * Request bodies used to be passed straight to Prisma, which accepts nested relation writes
+ * (`connect`, `update`, `deleteMany`, ...) and foreign keys like `guildId`. That let a guild admin
+ * modify records belonging to other guilds. Every writable field must now be listed in a schema;
+ * unknown fields are dropped and values of the wrong type are rejected.
+ */
+
+const SNOWFLAKE = /^\d{17,20}$/;
+
+class ValidationError extends Error {
+	constructor(field, message) {
+		super(`Invalid value for "${field}": ${message}`);
+		this.name = 'ValidationError';
+		this.field = field;
+		this.statusCode = 400;
+	}
+}
+
+const isPlainJSON = value => {
+	// JSON columns may hold any JSON value, but never functions/undefined/etc.
+	try {
+		return JSON.stringify(value) !== undefined;
+	} catch {
+		return false;
+	}
+};
+
+const types = {
+	boolean(value, field) {
+		if (value === 'true') return true;
+		if (value === 'false') return false;
+		if (typeof value !== 'boolean') throw new ValidationError(field, 'expected a boolean');
+		return value;
+	},
+	int(value, field, {
+		max = 2 ** 31 - 1, min = 0,
+	} = {}) {
+		if (typeof value === 'string' && /^-?\d+$/.test(value)) value = Number(value);
+		if (!Number.isSafeInteger(value)) throw new ValidationError(field, 'expected an integer');
+		if (value < min || value > max) throw new ValidationError(field, `must be between ${min} and ${max}`);
+		return value;
+	},
+	json(value, field) {
+		if (!isPlainJSON(value)) throw new ValidationError(field, 'expected JSON');
+		return value;
+	},
+	snowflake(value, field) {
+		if (typeof value !== 'string' || !SNOWFLAKE.test(value)) throw new ValidationError(field, 'expected a Discord ID');
+		return value;
+	},
+	snowflakes(value, field) {
+		if (!Array.isArray(value)) throw new ValidationError(field, 'expected an array of Discord IDs');
+		return value.map((v, i) => types.snowflake(v, `${field}[${i}]`));
+	},
+	string(value, field, { max = 4000 } = {}) {
+		if (typeof value !== 'string') throw new ValidationError(field, 'expected a string');
+		if (value.length > max) throw new ValidationError(field, `must be at most ${max} characters`);
+		return value;
+	},
+};
+
+/**
+ * @typedef {object} FieldSpec
+ * @property {keyof types | ((value: any, field: string) => any)} type
+ * @property {boolean} [nullable]
+ * @property {object} [options]
+ */
+
+/**
+ * Pick and validate the fields listed in `schema` from `body`.
+ * @param {object} body
+ * @param {Record<string, FieldSpec>} schema
+ * @returns {object}
+ */
+function sanitize(body, schema) {
+	if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+		throw new ValidationError('body', 'expected an object');
+	}
+	const out = {};
+	for (const [field, spec] of Object.entries(schema)) {
+		if (!Object.prototype.hasOwnProperty.call(body, field)) continue;
+		let value = body[field];
+		if (value === undefined) continue;
+		if (value === null || (spec.nullable && value === '')) {
+			if (!spec.nullable) throw new ValidationError(field, 'must not be empty');
+			out[field] = null;
+			continue;
+		}
+		const check = typeof spec.type === 'function' ? spec.type : types[spec.type];
+		value = check(value, field, spec.options);
+		out[field] = value;
+	}
+	return out;
+}
+
+const autoTag = (value, field) => {
+	if (['all', 'ticket', '!ticket'].includes(value)) return value;
+	return types.snowflakes(value, field);
+};
+
+const workingHours = (value, field) => {
+	const time = /^\d{1,2}:\d{2}$/;
+	if (!Array.isArray(value) || value.length !== 8 || typeof value[0] !== 'string') {
+		throw new ValidationError(field, 'expected [timezone, ...7 days]');
+	}
+	for (let i = 1; i < 8; i++) {
+		const day = value[i];
+		if (!Array.isArray(day) || day.length !== 2 || !day.every(t => typeof t === 'string' && time.test(t))) {
+			throw new ValidationError(`${field}[${i}]`, 'expected ["HH:MM", "HH:MM"]');
+		}
+	}
+	return value;
+};
+
+/** @type {Record<string, FieldSpec>} */
+const guildSettings = {
+	archive: { type: 'boolean' },
+	autoClose: {
+		nullable: true,
+		type: 'int',
+	},
+	autoTag: { type: autoTag },
+	blocklist: { type: 'snowflakes' },
+	claimButton: { type: 'boolean' },
+	closeButton: { type: 'boolean' },
+	errorColour: {
+		options: { max: 32 },
+		type: 'string',
+	},
+	footer: {
+		nullable: true,
+		options: { max: 2048 },
+		type: 'string',
+	},
+	locale: {
+		options: { max: 16 },
+		type: 'string',
+	},
+	logChannel: {
+		nullable: true,
+		type: 'snowflake',
+	},
+	primaryColour: {
+		options: { max: 32 },
+		type: 'string',
+	},
+	staleAfter: {
+		nullable: true,
+		type: 'int',
+	},
+	successColour: {
+		options: { max: 32 },
+		type: 'string',
+	},
+	workingHours: { type: workingHours },
+};
+
+/** @type {Record<string, FieldSpec>} */
+const category = {
+	channelName: {
+		options: { max: 100 },
+		type: 'string',
+	},
+	claiming: { type: 'boolean' },
+	cooldown: {
+		nullable: true,
+		type: 'int',
+	},
+	customTopic: {
+		nullable: true,
+		options: { max: 45 },
+		type: 'string',
+	},
+	description: {
+		options: { max: 100 },
+		type: 'string',
+	},
+	discordCategory: { type: 'snowflake' },
+	emoji: {
+		options: { max: 100 },
+		type: 'string',
+	},
+	enableFeedback: { type: 'boolean' },
+	image: {
+		nullable: true,
+		options: { max: 2048 },
+		type: 'string',
+	},
+	memberLimit: { type: 'int' },
+	name: {
+		options: { max: 100 },
+		type: 'string',
+	},
+	openingMessage: {
+		options: { max: 4096 },
+		type: 'string',
+	},
+	pingRoles: { type: 'snowflakes' },
+	ratelimit: {
+		nullable: true,
+		type: 'int',
+	},
+	requireTopic: { type: 'boolean' },
+	requiredRoles: { type: 'snowflakes' },
+	staffRoles: { type: 'snowflakes' },
+	totalLimit: { type: 'int' },
+};
+
+/** @type {Record<string, FieldSpec>} */
+const question = {
+	id: {
+		options: { max: 36 },
+		type: 'string',
+	},
+	label: {
+		options: { max: 45 },
+		type: 'string',
+	},
+	maxLength: {
+		nullable: true,
+		options: { max: 4000 },
+		type: 'int',
+	},
+	minLength: {
+		nullable: true,
+		options: { max: 4000 },
+		type: 'int',
+	},
+	options: { type: 'json' },
+	order: { type: 'int' },
+	placeholder: {
+		nullable: true,
+		options: { max: 100 },
+		type: 'string',
+	},
+	required: { type: 'boolean' },
+	style: {
+		options: {
+			max: 2,
+			min: 1,
+		},
+		type: 'int',
+	},
+	type: {
+		type: (value, field) => {
+			if (!['MENU', 'TEXT'].includes(value)) throw new ValidationError(field, 'expected "MENU" or "TEXT"');
+			return value;
+		},
+	},
+	value: {
+		nullable: true,
+		options: { max: 4000 },
+		type: 'string',
+	},
+};
+
+/** @type {Record<string, FieldSpec>} */
+const tag = {
+	content: {
+		options: { max: 4096 },
+		type: 'string',
+	},
+	name: {
+		options: { max: 100 },
+		type: 'string',
+	},
+	regex: {
+		nullable: true,
+		options: { max: 200 },
+		type: 'string',
+	},
+};
+
+/**
+ * Validate a category body, including its nested questions.
+ * @param {object} body
+ * @returns {{ data: object, questions: object[] | undefined }}
+ */
+function sanitizeCategory(body) {
+	const data = sanitize(body, category);
+	let questions;
+	if (body.questions !== undefined) {
+		if (!Array.isArray(body.questions)) throw new ValidationError('questions', 'expected an array');
+		if (body.questions.length > 25) throw new ValidationError('questions', 'too many questions');
+		questions = body.questions.map(q => sanitize(q, question));
+	}
+	return {
+		data,
+		questions,
+	};
+}
+
+module.exports = {
+	SNOWFLAKE,
+	ValidationError,
+	sanitize,
+	sanitizeCategory,
+	schemas: {
+		category,
+		guildSettings,
+		question,
+		tag,
+	},
+	types,
+};

@@ -67,7 +67,13 @@ module.exports = async client => {
 				});
 			}
 		} catch (err) {
-			res.send(err);
+			// usually "Unknown Member": the user isn't in this guild
+			client.log.verbose.http(err);
+			return res.code(403).send({
+				error: 'Forbidden',
+				message: 'You are not permitted for this action.',
+				statusCode: 403,
+			});
 		}
 	});
 
@@ -110,7 +116,13 @@ module.exports = async client => {
 				});
 			}
 		} catch (err) {
-			res.send(err);
+			// usually "Unknown Member": the user isn't in this guild
+			client.log.verbose.http(err);
+			return res.code(403).send({
+				error: 'Forbidden',
+				message: 'You are not permitted for this action.',
+				statusCode: 403,
+			});
 		}
 	});
 

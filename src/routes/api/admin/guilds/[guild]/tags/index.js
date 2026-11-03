@@ -1,5 +1,24 @@
 const ms = require('ms');
 const { logAdminEvent } = require('../../../../../../lib/logging');
+const {
+	ValidationError,
+	sanitize,
+	schemas,
+} = require('../../../../../../lib/validation');
+const { checkTagRegex } = require('../../../../../../lib/security');
+
+/**
+ * @param {object} body
+ * @returns {object}
+ */
+function sanitizeTag(body) {
+	const data = sanitize(body, schemas.tag);
+	if (data.regex) {
+		const result = checkTagRegex(data.regex);
+		if (!result.ok) throw new ValidationError('regex', result.reason);
+	}
+	return data;
+}
 
 module.exports.get = fastify => ({
 	handler: async req => {
@@ -22,7 +41,7 @@ module.exports.post = fastify => ({
 		/** @type {import('client')} */
 		const client = req.routeOptions.config.client;
 		const guild = client.guilds.cache.get(req.params.guild);
-		const data = req.body;
+		const data = sanitizeTag(req.body);
 		const tag = await client.prisma.tag.create({
 			data: {
 				...data,

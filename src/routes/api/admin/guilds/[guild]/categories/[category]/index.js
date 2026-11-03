@@ -1,4 +1,9 @@
 const { logAdminEvent } = require('../../../../../../../lib/logging');
+const { ChannelType: { GuildCategory } } = require('discord.js');
+const {
+	ValidationError,
+	sanitizeCategory,
+} = require('../../../../../../../lib/validation');
 const {
 	updateCommandPermissions,
 	updateStaffRoles,
@@ -79,7 +84,24 @@ module.exports.patch = fastify => ({
 		const categoryId = Number(req.params.category);
 		/** @type {import('discord.js').Guild} */
 		const guild = client.guilds.cache.get(req.params.guild);
-		const data = req.body;
+		// only known fields; prevents nested relation writes and foreign key changes
+		const {
+			data,
+			questions,
+		} = sanitizeCategory(req.body);
+
+		// drop roles that aren't in this server (e.g. deleted roles, or roles from another server)
+		for (const field of ['staffRoles', 'pingRoles', 'requiredRoles']) {
+			if (data[field]) data[field] = data[field].filter(id => guild.roles.cache.has(id));
+		}
+
+		if (data.discordCategory) {
+			const channel = client.channels.cache.get(data.discordCategory);
+			// unknown channels are tolerated (it may have been deleted), but not channels from another server
+			if (channel && (channel.guildId !== guild.id || channel.type !== GuildCategory)) {
+				throw new ValidationError('discordCategory', 'must be a category channel in this server');
+			}
+		}
 
 		const select = {
 			channelName: true,
@@ -126,19 +148,32 @@ module.exports.patch = fastify => ({
 
 		if (!original || original.guildId !== guildId) return res.status(400).send(new Error('Bad Request'));
 
-		if (Object.prototype.hasOwnProperty.call(data, 'id')) delete data.id;
-		if (Object.prototype.hasOwnProperty.call(data, 'createdAt')) delete data.createdAt;
+		// questions that already exist must belong to this category; anything else is created
+		let questionWrites;
+		if (questions) {
+			const existingIds = new Set(original.questions.map(q => q.id));
+			questionWrites = {
+				create: [],
+				update: [],
+			};
+			for (const q of questions) {
+				const id = q.id;
+				delete q.id;
+				if (id && existingIds.has(id)) {
+					questionWrites.update.push({
+						data: q,
+						where: { id },
+					});
+				} else {
+					questionWrites.create.push(q);
+				}
+			}
+		}
 
 		const category = await client.prisma.category.update({
 			data: {
 				...data,
-				questions: {
-					upsert: data.questions?.map(q => ({
-						create: q,
-						update: q,
-						where: { id: q.id },
-					})),
-				},
+				questions: questionWrites,
 			},
 			select,
 			where: { id: categoryId },

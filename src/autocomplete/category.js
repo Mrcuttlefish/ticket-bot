@@ -1,4 +1,5 @@
 const { Autocompleter } = require('@eartharoid/dbf');
+const { includesIgnoreCase } = require('../lib/security');
 
 module.exports = class CategoryCompleter extends Autocompleter {
 	constructor(client, options) {
@@ -24,7 +25,7 @@ module.exports = class CategoryCompleter extends Autocompleter {
 			if (ticket) categories = categories.filter(category => ticket.categoryId !== category.id);
 		}
 
-		const options = value ? categories.filter(category => category.name.match(new RegExp(value, 'i'))) : categories;
+		const options = value ? categories.filter(category => includesIgnoreCase(category.name, value)) : categories;
 		await interaction.respond(
 			options
 				.slice(0, 25)

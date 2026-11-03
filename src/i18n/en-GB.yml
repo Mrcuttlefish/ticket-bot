@@ -265,7 +265,13 @@ commands:
           name: ticket
     transfer:
       description: Transfer ownership of a ticket to another member
+      invalid_member:
+        description: Tickets can only be transferred to members of this server who aren't bots.
+        title: ❌ Invalid member
       name: transfer
+      not_staff:
+        description: Only staff members can transfer others' tickets.
+        title: ❌ Error
       options:
         member:
           description: The member to transfer ownership to

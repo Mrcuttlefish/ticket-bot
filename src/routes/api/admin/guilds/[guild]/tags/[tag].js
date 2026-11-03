@@ -1,5 +1,24 @@
 const ms = require('ms');
 const { logAdminEvent } = require('../../../../../../lib/logging');
+const {
+	ValidationError,
+	sanitize,
+	schemas,
+} = require('../../../../../../lib/validation');
+const { checkTagRegex } = require('../../../../../../lib/security');
+
+/**
+ * @param {object} body
+ * @returns {object}
+ */
+function sanitizeTag(body) {
+	const data = sanitize(body, schemas.tag);
+	if (data.regex) {
+		const result = checkTagRegex(data.regex);
+		if (!result.ok) throw new ValidationError('regex', result.reason);
+	}
+	return data;
+}
 
 module.exports.delete = fastify => ({
 	handler: async (req, res) => {
@@ -8,7 +27,7 @@ module.exports.delete = fastify => ({
 		const guildId = req.params.guild;
 		const tagId = Number(req.params.tag);
 		const original = tagId && await client.prisma.tag.findUnique({ where: { id: tagId } });
-		if (original.guildId !== guildId) return res.status(400).send(new Error('Bad Request'));
+		if (!original || original.guildId !== guildId) return res.status(400).send(new Error('Bad Request'));
 		const tag = await client.prisma.tag.delete({ where: { id: tagId } });
 
 		const cacheKey = `cache/guild-tags:${guildId}`;
@@ -60,14 +79,11 @@ module.exports.patch = fastify => ({
 		const guildId = req.params.guild;
 		const tagId = Number(req.params.tag);
 		const guild = client.guilds.cache.get(req.params.guild);
-		const data = req.body;
+		const data = sanitizeTag(req.body);
 
 		const original = req.params.tag && await client.prisma.tag.findUnique({ where: { id: tagId } });
 
 		if (!original || original.guildId !== guildId) return res.status(400).send(new Error('Bad Request'));
-
-		if (Object.prototype.hasOwnProperty.call(data, 'id')) delete data.id;
-		if (Object.prototype.hasOwnProperty.call(data, 'createdAt')) delete data.createdAt;
 
 		const tag = await client.prisma.tag.update({
 			data,

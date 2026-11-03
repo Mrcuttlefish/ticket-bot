@@ -16,7 +16,7 @@ module.exports.get = fastify => ({
 			httpOnly: true,
 			path: '/',
 			sameSite: 'Strict',
-			secure: false,
+			secure: process.env.HTTP_EXTERNAL?.startsWith('https://'),
 		});
 		res.header('Content-Type', 'text/html');
 		return res.send(`

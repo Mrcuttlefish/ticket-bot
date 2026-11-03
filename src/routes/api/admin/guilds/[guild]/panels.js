@@ -30,6 +30,7 @@ module.exports.post = fastify => ({
 			where: { id: guild.id },
 		});
 		const getMessage = client.i18n.getLocale(settings.locale);
+		if (!Array.isArray(data.categories)) throw new Error('No categories');
 		const categories = data.categories.map(id => {
 			const category = settings.categories.find(c => c.id === id);
 			if (!category) throw new Error(`Invalid category: ${id}`);
@@ -41,7 +42,15 @@ module.exports.post = fastify => ({
 		/** @type {import("discord.js").TextChannel} */
 		let channel;
 		if (data.channel) {
-			channel = await client.channels.fetch(data.channel);
+			// the channel must be in this guild, otherwise admins of one guild could post into another
+			channel = guild.channels.cache.get(String(data.channel));
+			if (!channel || !channel.isTextBased()) {
+				return res.code(400).send({
+					error: 'Bad Request',
+					message: 'The panel channel must be a text channel in this server.',
+					statusCode: 400,
+				});
+			}
 		} else {
 			const allow = ['ViewChannel', 'ReadMessageHistory'];
 			if (data.type === 'MESSAGE') allow.push('SendMessages');

@@ -4,6 +4,7 @@ const emoji = require('node-emoji');
 const Keyv = require('keyv');
 const ms = require('ms');
 const { isStaff } = require('../lib/users');
+const { includesIgnoreCase } = require('../lib/security');
 const { pools } = require('../lib/threads');
 
 const { crypto } = pools;
@@ -61,7 +62,7 @@ module.exports = class TicketCompleter extends Autocompleter {
 			this.cache.set(cacheKey, tickets, ms('1m'));
 		}
 
-		const options = value ? tickets.filter(t => t._name.match(new RegExp(value, 'i'))) : tickets;
+		const options = value ? tickets.filter(t => includesIgnoreCase(t._name, value)) : tickets;
 		return options
 			.slice(0, 25)
 			.map(t => ({

@@ -1,4 +1,4 @@
-const pattern = /^\/(?!\/)[^\s'">]*$/;
+const { isSafeRedirect } = require('../../lib/security');
 
 module.exports.get = () => ({
 	handler: async function (req, res) {
@@ -13,7 +13,8 @@ module.exports.get = () => ({
 		}
 
 		const state = new URLSearchParams(cookie);
-		if (state.get('secret') !== req.query.state) {
+		res.clearCookie('oauth2-state', { path: '/auth' });
+		if (!state.get('secret') || state.get('secret') !== req.query.state) {
 			return res.code(400).send({
 				error: 'Bad Request',
 				message: 'Invalid state.',
@@ -36,9 +37,17 @@ module.exports.get = () => ({
 			method: 'POST',
 		})).json();
 
+		if (!data.access_token) {
+			return res.code(400).send({
+				error: 'Bad Request',
+				message: 'Authorisation failed; please try again.',
+				statusCode: 400,
+			});
+		}
+
 		let redirect = (data.guild?.id && `/settings/${data.guild?.id}`) || state.get('redirect') || '/';
 
-		if (!pattern.test(redirect)) redirect = '/';
+		if (!isSafeRedirect(redirect)) redirect = '/';
 
 		const bearerOptions = { headers: { 'Authorization': `Bearer ${data.access_token}` } };
 		const user = await (await fetch('https://discordapp.com/api/users/@me', bearerOptions)).json();
@@ -66,7 +75,7 @@ module.exports.get = () => ({
 			maxAge: data.expires_in,
 			path: '/',
 			sameSite: 'Strict',
-			secure: false,
+			secure: process.env.HTTP_EXTERNAL?.startsWith('https://'),
 		});
 		res.header('Content-Type', 'text/html');
 		return res.send(`
