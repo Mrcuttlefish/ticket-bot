@@ -1,4 +1,5 @@
 const { Listener } = require('@eartharoid/dbf');
+const { resolveCategorySettings } = require('../../lib/tickets/options');
 const { MessageFlags } = require('discord.js');
 const { logMessageEvent } = require('../../lib/logging');
 
@@ -33,12 +34,15 @@ module.exports = class extends Listener {
 		if (!newMessage.editedAt) return;
 
 		const ticket = await client.prisma.ticket.findUnique({
-			include: { guild: true },
+			include: {
+				category: true,
+				guild: true,
+			},
 			where: { id: newMessage.channel.id },
 		});
 		if (!ticket) return;
 
-		if (ticket.guild.archive) {
+		if (resolveCategorySettings(ticket.guild, ticket.category).archive) {
 			try {
 				await client.tickets.archiver.saveMessage(ticket.id, newMessage);
 			} catch (error) {

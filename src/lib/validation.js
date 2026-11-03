@@ -195,11 +195,29 @@ const guildSettings = {
 
 /** @type {Record<string, FieldSpec>} */
 const category = {
+	archive: {
+		nullable: true,
+		type: 'boolean',
+	},
+	autoClose: {
+		nullable: true,
+		options: { max: MAX_DURATION },
+		type: 'int',
+	},
+	blockedRoles: { type: 'snowflakes' },
 	channelName: {
 		options: { max: 100 },
 		type: 'string',
 	},
+	claimButton: {
+		nullable: true,
+		type: 'boolean',
+	},
 	claiming: { type: 'boolean' },
+	closeButton: {
+		nullable: true,
+		type: 'boolean',
+	},
 	cooldown: {
 		nullable: true,
 		options: { max: MAX_DURATION },
@@ -244,6 +262,11 @@ const category = {
 	requireTopic: { type: 'boolean' },
 	requiredRoles: { type: 'snowflakes' },
 	roleLimits: { type: roleLimits },
+	staleAfter: {
+		nullable: true,
+		options: { max: MAX_DURATION },
+		type: 'int',
+	},
 	staffRoles: { type: 'snowflakes' },
 	totalLimit: { type: 'int' },
 };

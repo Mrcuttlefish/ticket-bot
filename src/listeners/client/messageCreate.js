@@ -15,6 +15,7 @@ const {
 } = require('../../lib/users');
 const ms = require('ms');
 const { handleGhostPing } = require('../../lib/tickets/ghost-ping');
+const { resolveCategorySettings } = require('../../lib/tickets/options');
 const { compileTagRegex } = require('../../lib/security');
 const { fillTagPlaceholders } = require('../../lib/tags');
 const emoji = require('node-emoji');
@@ -186,11 +187,14 @@ module.exports = class extends Listener {
 			const settings = await client.prisma.guild.findUnique({ where: { id: message.guild.id } });
 			if (!settings) return;
 			const getMessage = client.i18n.getLocale(settings.locale);
-			let ticket = await client.prisma.ticket.findUnique({ where: { id: message.channel.id } });
+			let ticket = await client.prisma.ticket.findUnique({
+				include: { category: true },
+				where: { id: message.channel.id },
+			});
 
 			if (ticket) {
-				// archive messages
-				if (settings.archive) {
+				// archive messages (categories can override the archive setting, upstream #536)
+				if (resolveCategorySettings(settings, ticket.category).archive) {
 					client.tickets.archiver.saveMessage(ticket.id, message)
 						.catch(error => {
 							client.log.warn('Failed to archive message', message.id);

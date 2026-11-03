@@ -1,4 +1,5 @@
 const { Listener } = require('@eartharoid/dbf');
+const { resolveCategorySettings } = require('../../lib/tickets/options');
 const {
 	AuditLogEvent, MessageFlags,
 } = require('discord.js');
@@ -26,7 +27,10 @@ module.exports = class extends Listener {
 		if (!message.guild) return;
 
 		const ticket = await client.prisma.ticket.findUnique({
-			include: { guild: true },
+			include: {
+				category: true,
+				guild: true,
+			},
 			where: { id: message.channel.id },
 		});
 		if (!ticket) return;
@@ -38,7 +42,7 @@ module.exports = class extends Listener {
 			type: AuditLogEvent.MessageDelete,
 		})).entries.first();
 
-		if (ticket.guild.archive) {
+		if (resolveCategorySettings(ticket.guild, ticket.category).archive) {
 			try {
 				await client.prisma.archivedMessage.update({
 					data: { deleted: true },

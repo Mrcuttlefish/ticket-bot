@@ -21,7 +21,7 @@ const { logTicketEvent } = require('../logging');
 const { isStaff } = require('../users');
 const { getWorkingStatus } = require('./working-hours');
 const {
-	getMemberLimit, getNumberBase, getPingRoles, pickDiscordCategory,
+	getMemberLimit, getNumberBase, getPingRoles, pickDiscordCategory, resolveCategorySettings,
 } = require('./options');
 const {
 	formatChannelName, formatChannelTopic, formatOpeningMessage,
@@ -244,8 +244,10 @@ module.exports = class TicketManager {
 			flags: MessageFlags.Ephemeral,
 		});
 
-		if (category.guild.blocklist.length !== 0) {
-			const blocked = category.guild.blocklist.some(r => member.roles.cache.has(r));
+		// the guild's blocklist plus the category's blocked roles (upstream PR #495)
+		const { blockedRoles } = resolveCategorySettings(category.guild, category);
+		if (blockedRoles.length !== 0) {
+			const blocked = blockedRoles.some(r => member.roles.cache.has(r));
 			if (blocked) return await sendError('blocked');
 		}
 
@@ -549,7 +551,7 @@ module.exports = class TicketManager {
 			);
 		}
 
-		if (category.guild.claimButton && category.claiming) {
+		if (resolveCategorySettings(category.guild, category).claimButton && category.claiming) {
 			components.addComponents(
 				new ButtonBuilder()
 					.setCustomId(JSON.stringify({ action: 'claim' }))
@@ -559,7 +561,7 @@ module.exports = class TicketManager {
 			);
 		}
 
-		if (category.guild.closeButton) {
+		if (resolveCategorySettings(category.guild, category).closeButton) {
 			components.addComponents(
 				new ButtonBuilder()
 					.setCustomId(JSON.stringify({ action: 'close' }))
@@ -676,7 +678,7 @@ module.exports = class TicketManager {
 					});
 				}
 				channel.send({
-					components: category.guild.archive
+					components: resolveCategorySettings(category.guild, category).archive
 						? [
 							new ActionRowBuilder()
 								.addComponents(
@@ -731,7 +733,7 @@ module.exports = class TicketManager {
 			const ticket = await this.client.prisma.ticket.create({ data });
 
 			// the opening message was sent before the ticket existed, so messageCreate couldn't archive it (upstream #504)
-			if (category.guild.archive) {
+			if (resolveCategorySettings(category.guild, category).archive) {
 				this.archiver.saveMessage(ticket.id, sent).catch(error => this.client.log.error(error));
 			}
 			this.$count.categories[categoryId].total++;
@@ -744,7 +746,7 @@ module.exports = class TicketManager {
 				await this.client.keyv.set(cacheKey, expiresAt, TTL);
 			}
 
-			if (category.guild.archive && message) {
+			if (resolveCategorySettings(category.guild, category).archive && message) {
 				if (
 					await this.client.prisma.archivedMessage.findUnique({ where: { id: message.id } }) ||
 					await this.archiver.saveMessage(ticket.id, message, true)
@@ -886,7 +888,7 @@ module.exports = class TicketManager {
 				);
 			}
 
-			if (ticket.guild.claimButton && ticket.category.claiming) {
+			if (resolveCategorySettings(ticket.guild, ticket.category).claimButton && ticket.category.claiming) {
 				components.addComponents(
 					new ButtonBuilder()
 						.setCustomId(JSON.stringify({ action: 'unclaim' }))
@@ -896,7 +898,7 @@ module.exports = class TicketManager {
 				);
 			}
 
-			if (ticket.guild.closeButton) {
+			if (resolveCategorySettings(ticket.guild, ticket.category).closeButton) {
 				components.addComponents(
 					new ButtonBuilder()
 						.setCustomId(JSON.stringify({ action: 'close' }))
@@ -982,7 +984,7 @@ module.exports = class TicketManager {
 				);
 			}
 
-			if (ticket.guild.claimButton && ticket.category.claiming) {
+			if (resolveCategorySettings(ticket.guild, ticket.category).claimButton && ticket.category.claiming) {
 				components.addComponents(
 					new ButtonBuilder()
 						.setCustomId(JSON.stringify({ action: 'claim' }))
@@ -992,7 +994,7 @@ module.exports = class TicketManager {
 				);
 			}
 
-			if (ticket.guild.closeButton) {
+			if (resolveCategorySettings(ticket.guild, ticket.category).closeButton) {
 				components.addComponents(
 					new ButtonBuilder()
 						.setCustomId(JSON.stringify({ action: 'close' }))
@@ -1168,7 +1170,7 @@ module.exports = class TicketManager {
 		if (staff) {
 			embed.setDescription(
 				getMessage('ticket.close.staff_request.description', { requestedBy: interaction.user.toString() }) +
-				(ticket.guild.archive ? getMessage('ticket.close.staff_request.archived') : ''),
+				(resolveCategorySettings(ticket.guild, ticket.category).archive ? getMessage('ticket.close.staff_request.archived') : ''),
 			);
 		}
 
@@ -1198,8 +1200,9 @@ module.exports = class TicketManager {
 			embeds: [embed],
 		});
 
+		const { autoClose } = resolveCategorySettings(ticket.guild, ticket.category);
 		this.$stale.set(ticket.id, {
-			closeAt: ticket.guild.autoClose ? Date.now() + ticket.guild.autoClose : null,
+			closeAt: autoClose ? Date.now() + autoClose : null,
 			closedBy: interaction.user.id, // null if set as stale due to inactivity
 			message: sent,
 			messages: 0,
@@ -1304,7 +1307,7 @@ module.exports = class TicketManager {
 
 		const components = [];
 
-		if (ticket.guild.archive) {
+		if (resolveCategorySettings(ticket.guild, ticket.category).archive) {
 			components.push(
 				new ActionRowBuilder()
 					.addComponents(

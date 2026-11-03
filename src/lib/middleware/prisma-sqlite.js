@@ -11,6 +11,7 @@ const jsonFields = [
 	'pingRoleRules',
 	'roleLimits',
 	'holidays',
+	'blockedRoles',
 ];
 
 const traverse = (obj, action) => {
