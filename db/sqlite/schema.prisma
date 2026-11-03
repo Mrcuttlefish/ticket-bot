@@ -68,6 +68,7 @@ model ArchivedUser {
 }
 
 model Category {
+  anonymous          Boolean    @default(false) // staff replies are relayed by the bot without their name
   archive            Boolean? // null: use the guild setting
   autoClose          Int? // seconds; null: use the guild setting, 0: off
   blockedRoles       String     @default("[]") // in addition to the guild blocklist

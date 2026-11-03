@@ -25,6 +25,8 @@ module.exports = class extends Listener {
 		const client = this.client;
 
 		if (!message.guild) return;
+		// anonymous staff messages are deleted after being posted again by the bot; the archived original stays
+		if (client.tickets.$relayed.delete(message.id)) return;
 
 		const ticket = await client.prisma.ticket.findUnique({
 			include: {

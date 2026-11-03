@@ -226,6 +226,7 @@ const category = {
 		options: { max: MAX_DURATION },
 		type: 'int',
 	},
+	anonymous: { type: 'boolean' },
 	blockedRoles: { type: 'snowflakes' },
 	channelName: {
 		options: { max: 100 },

@@ -1,4 +1,5 @@
 const { isStaff } = require('./users');
+const { isRelay } = require('./tickets/anonymous');
 const {
 	getPingRoles, resolveCategorySettings,
 } = require('./tickets/options');
@@ -91,12 +92,13 @@ module.exports = async function handleStaleTickets(client, staleInterval) {
 					closed++;
 					continue;
 				}
-				const messages = (await channel.messages.fetch({ limit: 5 })).filter(m => m.author.id !== client.user.id);
+				// relays of anonymous staff messages are sent by the bot but count as staff messages
+				const messages = (await channel.messages.fetch({ limit: 5 })).filter(m => m.author.id !== client.user.id || isRelay(m, client.user.id));
 				let ping = '';
 
 				if (messages.size > 0) {
 					const lastMessage =  messages.first();
-					const staff = await isStaff(channel.guild, lastMessage.author.id);
+					const staff = isRelay(lastMessage, client.user.id) || await isStaff(channel.guild, lastMessage.author.id);
 					if (staff) {
 						ping = `<@${ticket.createdById}>`;
 					} else {
