@@ -22,7 +22,6 @@ const {
 	SeparatorBuilder,
 	TextDisplayBuilder,
 	ThumbnailBuilder,
-	escapeMarkdown,
 	resolveColor,
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('../embed');
@@ -45,6 +44,15 @@ const LIMITS = {
 
 // Discord's limit for a message's content
 const TEXT_LIMIT = 2000;
+
+/**
+ * A member's name as plain text in markdown. One pass escapes every character Discord's markdown uses, including
+ * backslashes and link brackets (escapeMarkdown leaves brackets alone, and escaping them after it would let a
+ * backslash in the name undo its escaping).
+ * @param {string} name
+ * @returns {string}
+ */
+const escapeName = name => String(name ?? '').replace(/[\\*_~`|>#\-[\]()<:]/g, '\\$&');
 // in text opening messages, the topic or answers come after this line so they can be replaced when edited
 const DETAILS_MARK = '\n\u200b\n';
 
@@ -144,7 +152,7 @@ function buildOpeningMessage({
 }) {
 	if (style === 'TEXT' || style === 'OFF') {
 		const head = style === 'TEXT'
-			? [content, `**${escapeMarkdown(author.name).replace(/[[\]]/g, '\\$&')}**`, description, image].filter(Boolean).join('\n\n')
+			? [content, `**${escapeName(author.name)}**`, description, image].filter(Boolean).join('\n\n')
 			: content;
 		return {
 			// the text can include things members wrote (the topic and answers, or placeholders in the opening message),

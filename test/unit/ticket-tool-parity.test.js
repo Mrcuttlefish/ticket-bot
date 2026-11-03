@@ -199,3 +199,16 @@ test('audit: members can\'t add a second details marker or markdown through thei
 	assert.equal(message.content.split(DETAILS_MARK).length, 2);
 	assert.ok(message.content.includes('\\*\\*\\[click\\]'));
 });
+
+test('audit: a backslash in a member\'s name can\'t undo the escaping', () => {
+	const message = buildOpeningMessage({
+		author: { name: 'evil\\' },
+		colour: 'Blurple',
+		content: 'mentions',
+		description: null,
+		fields: [],
+		style: 'TEXT',
+	});
+	// the name's backslash is escaped, so the closing ** still closes the bold
+	assert.ok(message.content.includes('**evil\\\\**'), message.content);
+});
