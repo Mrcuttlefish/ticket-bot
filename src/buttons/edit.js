@@ -3,15 +3,12 @@ const {
 	ActionRowBuilder,
 	MessageFlags,
 	ModalBuilder,
-	StringSelectMenuBuilder,
-	StringSelectMenuOptionBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 } = require('discord.js');
-const emoji = require('node-emoji');
 const ExtendedEmbedBuilder = require('../lib/embed');
 const { isStaff } = require('../lib/users');
-const { buildQuestionInput } = require('../lib/tickets/question-input');
+const { buildQuestionComponent } = require('../lib/tickets/question-input');
 const { pools } = require('../lib/threads');
 
 const { crypto } = pools;
@@ -93,39 +90,13 @@ module.exports = class EditButton extends Button {
 						edit: true,
 					}))
 					.setTitle(ticket.category.name)
-					.setComponents(
+					// labels hold either a text input or a select menu (upstream #446)
+					.addLabelComponents(
 						await Promise.all(
-							ticket.questionAnswers
-								.filter(a => a.question.type === 'TEXT') // TODO: remove this when modals support select menus
-								.map(async a => {
-									if (a.question.type === 'TEXT') {
-										const value = a.value ? await crypto.queue(w => w.decrypt(a.value)) : null;
-										return new ActionRowBuilder().setComponents(buildQuestionInput(a.question, value, a.id));
-									} else if (a.question.type === 'MENU') {
-										return new ActionRowBuilder()
-											.setComponents(
-												new StringSelectMenuBuilder()
-													.setCustomId(a.question.id)
-													.setPlaceholder(a.question.placeholder || a.question.label)
-													.setMaxValues(a.question.maxLength)
-													.setMinValues(a.question.minLength)
-													.setOptions(
-														a.question.options.map((o, i) => {
-															const builder = new StringSelectMenuOptionBuilder()
-																.setValue(String(i))
-																.setLabel(o.label);
-															if (o.description) builder.setDescription(o.description);
-															if (o.emoji) {
-																builder.setEmoji(emoji.hasEmoji(o.emoji)
-																	? emoji.get(o.emoji)
-																	: { id: o.emoji });
-															}
-															return builder;
-														}),
-													),
-											);
-									}
-								}),
+							ticket.questionAnswers.slice(0, 5).map(async a => {
+								const value = a.value ? await crypto.queue(w => w.decrypt(a.value)) : null;
+								return buildQuestionComponent(a.question, value, a.id);
+							}),
 						),
 					),
 			);

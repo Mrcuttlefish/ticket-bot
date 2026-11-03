@@ -8,13 +8,10 @@ const {
 	ChannelType,
 	inlineCode,
 	ModalBuilder,
-	StringSelectMenuBuilder,
-	StringSelectMenuOptionBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 	MessageFlags,
 } = require('discord.js');
-const emoji = require('node-emoji');
 const ms = require('ms');
 const ExtendedEmbedBuilder = require('../embed');
 const { logTicketEvent } = require('../logging');
@@ -22,7 +19,9 @@ const { increment } = require('../metrics');
 const { sendTicketWebhook } = require('./webhook-events');
 const { isStaff } = require('../users');
 const { getWorkingStatus } = require('./working-hours');
-const { buildQuestionInput } = require('./question-input');
+const {
+	buildQuestionComponent, readAnswer,
+} = require('./question-input');
 const {
 	buildButtons, buildOpeningMessage, editOpeningButtons,
 } = require('./opening-message');
@@ -319,34 +318,8 @@ module.exports = class TicketManager {
 						referencesTicketId,
 					}))
 					.setTitle(category.name)
-					.setComponents(
-						category.questions
-							.filter(q => q.type === 'TEXT') // TODO: remove this when modals support select menus
-							.map(q => {
-								if (q.type === 'TEXT') {
-									return new ActionRowBuilder().setComponents(buildQuestionInput(q));
-								} else if (q.type === 'MENU') {
-									return new ActionRowBuilder()
-										.setComponents(
-											new StringSelectMenuBuilder()
-												.setCustomId(q.id)
-												.setPlaceholder(q.placeholder || q.label)
-												.setMaxValues(q.maxLength)
-												.setMinValues(q.minLength)
-												.setOptions(
-													q.options.map((o, i) => {
-														const builder = new StringSelectMenuOptionBuilder()
-															.setValue(String(i))
-															.setLabel(o.label);
-														if (o.description) builder.setDescription(o.description);
-														if (o.emoji) builder.setEmoji(emoji.hasEmoji(o.emoji) ? emoji.get(o.emoji) : { id: o.emoji });
-														return builder;
-													}),
-												),
-										);
-								}
-							}),
-					),
+					// labels hold either a text input or a select menu (upstream #446)
+					.addLabelComponents(category.questions.slice(0, 5).map(q => buildQuestionComponent(q))),
 			);
 		} else if (category.requireTopic && !topic) {
 			await interaction.showModal(
@@ -404,16 +377,20 @@ module.exports = class TicketManager {
 			if (action === 'questions') {
 				answers = await Promise.all(
 					category.questions
-						.filter(q => q.type === 'TEXT')
-						.map(async q => ({
-							questionId: q.id,
-							userId: interaction.user.id,
-							value: interaction.fields.getTextInputValue(q.id)
-								? await crypto.queue(w => w.encrypt(interaction.fields.getTextInputValue(q.id)))
-								: '', // TODO: maybe this should be null?
-						})),
+						.slice(0, 5)
+						.map(async q => {
+							const value = readAnswer(interaction.fields, q);
+							return {
+								questionId: q.id,
+								userId: interaction.user.id,
+								value: value ? await crypto.queue(w => w.encrypt(value)) : '',
+							};
+						}),
 				);
-				if (category.customTopic) topic = interaction.fields.getTextInputValue(category.customTopic);
+				if (category.customTopic) {
+					const question = category.questions.find(q => q.id === category.customTopic);
+					if (question) topic = readAnswer(interaction.fields, question) || null;
+				}
 			} else if (action === 'topic') {
 				topic = interaction.fields.getTextInputValue('topic');
 			}
@@ -491,9 +468,9 @@ module.exports = class TicketManager {
 
 		let fields = [];
 		if (answers) {
-			fields = category.questions.map(q => ({
+			fields = category.questions.slice(0, 5).map(q => ({
 				name: q.label,
-				value: interaction.fields.getTextInputValue(q.id) || getMessage('ticket.answers.no_value'),
+				value: readAnswer(interaction.fields, q) || getMessage('ticket.answers.no_value'),
 			}));
 		} else if (topic) {
 			fields = [{

@@ -239,3 +239,63 @@ test('Components V2: the opening message uses layout components, and claiming sw
 	assert.doesNotMatch(edited, /\{\\"action\\":\\"claim\\"\}/);
 	assert.match(edited, /My order is missing/, 'the rest of the message is kept');
 });
+
+test('menu questions: a modal with a select menu, and the chosen options are saved and shown (upstream #446)', async () => {
+	const { client } = ctx;
+	const guild = makeGuild(client);
+	const { category } = await seedCategory(client, guild, {
+		questions: {
+			create: [
+				{
+					id: 'menu-test-order',
+					label: 'Order number',
+					order: 0,
+				},
+				{
+					id: 'menu-test-platform',
+					label: 'Platform',
+					maxLength: 2,
+					minLength: 1,
+					options: [{ label: 'Web' }, { label: 'iOS' }, { label: 'Android' }],
+					order: 1,
+					type: 'MENU',
+				},
+			],
+		},
+	});
+	const creator = makeMember(guild);
+	const shown = await create(client, creator, category);
+	const modal = shown.responses[0].data.toJSON();
+	assert.equal(modal.components.length, 2);
+	assert.equal(modal.components[0].component.type, 4, 'a text input');
+	const menu = modal.components[1].component;
+	assert.equal(menu.type, 3, 'a select menu');
+	assert.equal(modal.components[1].label, 'Platform');
+	assert.deepEqual(menu.options.map(o => o.label), ['Web', 'iOS', 'Android']);
+	assert.equal(menu.max_values, 2);
+
+	const submit = makeInteraction({
+		fields: {
+			'menu-test-order': '12345',
+			'menu-test-platform': ['0', '2'],
+		},
+		member: creator,
+		type: 'modal',
+	});
+	await client.tickets.postQuestions({
+		action: 'questions',
+		categoryId: category.id,
+		interaction: submit,
+	});
+	const [channel] = guild.created;
+	const opening = JSON.stringify(channel.sent[0].embeds.map(e => e.data));
+	assert.match(opening, /12345/);
+	assert.match(opening, /Web\\nAndroid/);
+	const answers = await client.prisma.questionAnswer.findMany({
+		include: { question: true },
+		where: { ticketId: channel.id },
+	});
+	assert.equal(answers.length, 2);
+	const { decrypt } = require('../../src/lib/crypto');
+	assert.equal(decrypt(answers.find(a => a.questionId === 'menu-test-platform').value), 'Web\nAndroid');
+});
