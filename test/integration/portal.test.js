@@ -127,7 +127,7 @@ test('portal: a ticket, its permissions, and 404 for tickets you can\'t see', as
 	assert.equal(res.status, 404);
 });
 
-test('portal: messages are oldest first, and anonymous tickets hide staff from the creator', async () => {
+test('portal: messages are oldest first, and anonymous tickets hide staff from everyone', async () => {
 	const {
 		creator, open, say, staff, url,
 	} = await setup({ anonymous: true });
@@ -144,7 +144,27 @@ test('portal: messages are oldest first, and anonymous tickets hide staff from t
 	assert.ok(!res.text.includes(staff.id));
 
 	res = await api.as(staff.id)('GET', `${url}/${channel.id}/messages`);
-	assert.equal(res.body.messages.filter(m => !m.author.bot)[1].author.username, 'alex', 'staff see who replied');
+	assert.equal(res.body.messages.filter(m => !m.author.bot)[1].author.username, 'Staff', 'staff don\'t see who replied either');
+	assert.ok(!res.text.includes(staff.id));
+
+	// the database keeps the real author
+	const row = await ctx.client.prisma.archivedMessage.findFirst({
+		where: {
+			ticketId: channel.id,
+			authorId: staff.id,
+		},
+	});
+	assert.ok(row);
+
+	// the creator's own list doesn't leak who claimed it
+	await ctx.client.prisma.ticket.update({
+		data: { claimedById: staff.id },
+		where: { id: channel.id },
+	});
+	res = await api.as(creator.id)('GET', `${url}/@me`);
+	assert.equal(res.status, 200, res.text);
+	assert.equal(res.body[0].claimedById, '0');
+	assert.ok(!res.text.includes(staff.id));
 });
 
 test('portal: replying from the web', async () => {

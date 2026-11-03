@@ -71,7 +71,7 @@ module.exports = class TranscriptSlashCommand extends SlashCommand {
 	/**
 	 * @param {object} ticket
 	 * @param {object} [options]
-	 * @param {boolean} [options.anonymise] hide staff names (for the creator of an anonymous ticket)
+	 * @param {boolean} [options.anonymise] hide staff names (anonymous tickets)
 	 */
 	async fillTemplate(ticket, { anonymise = false } = {}) {
 		/** @type {import("client")} */
@@ -177,7 +177,7 @@ module.exports = class TranscriptSlashCommand extends SlashCommand {
 		const {
 			fileName,
 			transcript,
-		} = await this.fillTemplate(ticket, { anonymise: Boolean(ticket.category.anonymous) && !this.isStaffFor(interaction, ticket) });
+		} = await this.fillTemplate(ticket, { anonymise: Boolean(ticket.category.anonymous) }); // for staff too
 		const attachment = new AttachmentBuilder()
 			.setFile(Buffer.from(transcript))
 			.setName(fileName);

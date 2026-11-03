@@ -33,9 +33,7 @@ module.exports.get = fastify => ({
 		const client = req.routeOptions.config.client;
 		const found = await findViewableTicket(req, res, ARCHIVE_INCLUDE);
 		if (!found) return;
-		const {
-			staff, ticket,
-		} = found;
+		const { ticket } = found;
 		const limit = Math.min(Math.max(parseInt(req.query?.limit) || 100, 1), 200);
 		const cursor = /^\d{17,20}$/.test(req.query?.cursor ?? '') ? req.query.cursor : null;
 		const rows = await client.prisma.archivedMessage.findMany({
@@ -53,7 +51,7 @@ module.exports.get = fastify => ({
 			next = rows[rows.length - 1].id;
 		}
 		return {
-			messages: await serializeMessages(client, ticket, rows, staff),
+			messages: await serializeMessages(client, ticket, rows),
 			next,
 		};
 	},
@@ -110,6 +108,8 @@ module.exports.post = fastify => ({
 			nonce: `${WEB_NONCE_PREFIX}${SnowflakeUtil.generate()}`.slice(0, 25),
 		});
 
+		if (hideAuthor) client.log.info.tickets(`Anonymous web reply ${sent.id} in ticket ${ticket.id} was sent by ${member.user.tag} (${member.id})`);
+
 		// archived with the real author, like messages sent in Discord
 		await client.tickets.archiver.saveMessage(ticket.id, {
 			attachments: new Collection(),
@@ -147,7 +147,7 @@ module.exports.post = fastify => ({
 			where: { id: ticket.id },
 		});
 		const archived = await client.prisma.archivedMessage.findUnique({ where: { id: sent.id } });
-		const [message] = archived ? await serializeMessages(client, fresh, [archived], staff) : [null];
+		const [message] = archived ? await serializeMessages(client, fresh, [archived]) : [null];
 		return res.code(201).send({ message });
 	},
 	onRequest: [fastify.authenticate, fastify.isMember],

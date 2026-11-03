@@ -19,7 +19,7 @@ module.exports.get = fastify => ({
 		} = found;
 		const decrypt = value => (value ? crypto.queue(w => w.decrypt(value)) : value);
 		return {
-			...await serializeTicket(ticket, staff),
+			...await serializeTicket(ticket),
 			closedReason: ticket.closedReason ? await decrypt(ticket.closedReason) : null,
 			feedback: ticket.feedback
 				? {

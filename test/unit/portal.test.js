@@ -90,8 +90,7 @@ test('permissions and anonymous staff in tickets', async () => {
 		...ticket,
 		open: false,
 	}, '1', false).canReply, false);
-	const hidden = await serializeTicket(ticket, false);
-	assert.equal(hidden.claimedById, STAFF_AUTHOR.id);
+	const hidden = await serializeTicket(ticket);
+	assert.equal(hidden.claimedById, STAFF_AUTHOR.id, 'hidden from everyone, staff included');
 	assert.equal(hidden.closedById, '1', 'the creator isn\'t hidden');
-	assert.equal((await serializeTicket(ticket, true)).claimedById, '2');
 });

@@ -194,6 +194,9 @@ test('anonymous categories: staff messages are posted again as "Staff" and archi
 	await runComponent(MessageDelete, client, fromStaff);
 	assert.equal((await client.prisma.archivedMessage.findUnique({ where: { id: fromStaff.id } })).deleted, false);
 
+	// the real author is only in the bot's own log (and the database), never in Discord
+	assert.ok(client.log.entries.some(([level, line]) => level === 'info.tickets' && line.includes(fromStaff.id) && line.includes(staff.id)));
+
 	// the relay itself (sent by the bot) isn't archived as a second copy
 	const relayMessage = [...channel.messages.cache.values()].find(m => m.nonce === relay.nonce);
 	await runComponent(MessageCreate, client, relayMessage);
@@ -201,7 +204,7 @@ test('anonymous categories: staff messages are posted again as "Staff" and archi
 	assert.equal(await client.prisma.archivedMessage.findUnique({ where: { id: relayMessage.id } }), null);
 });
 
-test('anonymous categories: transcripts hide staff from the creator, but not from staff', async () => {
+test('anonymous categories: transcripts hide staff from everyone, staff included', async () => {
 	const {
 		client, channel, creator, staff,
 	} = await openTicket({ anonymous: true });
@@ -232,5 +235,40 @@ test('anonymous categories: transcripts hide staff from the creator, but not fro
 	assert.ok(forCreator.includes(creator.user.username));
 
 	const forStaff = await transcriptFor(staff);
-	assert.ok(forStaff.includes(staff.user.username), 'staff see who replied');
+	assert.match(forStaff, /looking into it/);
+	assert.ok(!forStaff.includes(staff.user.username), 'staff don\'t see who replied either');
+});
+
+test('anonymous categories: the log channel shows "Staff", and the bot\'s own log has the real name', async () => {
+	const { makeTextChannel } = require('../helpers/discord');
+	const {
+		client, channel, creator, guild, staff,
+	} = await openTicket({ anonymous: true });
+	const logs = makeTextChannel(guild);
+	await client.prisma.guild.update({
+		data: { logChannel: logs.id },
+		where: { id: guild.id },
+	});
+	await client.tickets.getTicket(channel.id, true);
+	const { logTicketEvent } = require('../../src/lib/logging');
+	await logTicketEvent(client, {
+		action: 'claim',
+		target: {
+			id: channel.id,
+			name: channel.toString(),
+		},
+		userId: staff.id,
+	});
+	const sent = JSON.stringify(logs.sent.at(-1).embeds.map(e => e.data));
+	assert.match(sent, /Staff/);
+	assert.ok(!sent.includes(staff.id) && !sent.includes('alex'), 'no name, mention or avatar');
+	assert.ok(client.log.entries.some(([level, line]) => level === 'info.tickets' && line.includes('alex') && line.includes(channel.id)));
+
+	// the creator is still named
+	await logTicketEvent(client, {
+		action: 'update',
+		target: { id: channel.id },
+		userId: creator.id,
+	});
+	assert.ok(JSON.stringify(logs.sent.at(-1).embeds.map(e => e.data)).includes(creator.id));
 });
