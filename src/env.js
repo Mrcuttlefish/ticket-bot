@@ -47,6 +47,7 @@ const env = {
 	PUBLIC_BOT: () => true, // optional
 	PUBLISH_COMMANDS: () => true, // optional
 	SUPER: () => true, // optional
+	WEBHOOKS_ALLOW_PRIVATE: () => true, // optional
 };
 
 const load = options => {

@@ -138,6 +138,8 @@ model Guild {
   tags               Tag[]
   ticketNumberOffset Int        @default(0)
   tickets            Ticket[]
+  webhookSecret      String?    @db.Text // encrypted
+  webhookUrl         String?    @db.Text
   workingHours       Json       @default("[\"UTC\", [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"]]")
 
   @@map("guilds")

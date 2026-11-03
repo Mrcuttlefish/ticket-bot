@@ -56,6 +56,7 @@ services:
       PUBLIC_BOT: "false"
       PUBLISH_COMMANDS: "false"
       SUPER: 319467558166069248 # comma-separated list of discord user IDs with superuser access to change bot settings for all guilds the bot is in, regardless of the users permissions
+      WEBHOOKS_ALLOW_PRIVATE: "false" # set to true to allow webhooks to private addresses and plain HTTP (only if you trust every server admin)
       # IMPORTANT: You should read https://discordtickets.app/self-hosting/configuration/#super before continuing!
       
 networks:

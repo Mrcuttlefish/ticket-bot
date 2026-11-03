@@ -93,6 +93,8 @@ module.exports.post = fastify => ({
 			// validate everything before deleting the existing settings;
 			// only known fields are copied so the file can't write to other guilds' data
 			const settings = sanitize(settingsJSON, schemas.guildSettings);
+			delete settings.webhookSecret; // never exported; it must be set again
+			if (settings.webhookUrl) userLog.warn('The webhook secret (if there was one) must be set again');
 			settings.tags = settingsJSON.tags.map(raw => {
 				const tag = sanitize(raw, schemas.tag);
 				if (tag.regex && !checkTagRegex(tag.regex).ok) {
