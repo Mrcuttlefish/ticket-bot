@@ -18,8 +18,8 @@ const ms = require('ms');
 const ExtendedEmbedBuilder = require('../embed');
 const { logTicketEvent } = require('../logging');
 const { isStaff } = require('../users');
+const { getWorkingStatus } = require('./working-hours');
 const { Collection } = require('discord.js');
-const spacetime = require('spacetime');
 
 const { getSUID } = require('../logging');
 const {
@@ -703,6 +703,11 @@ module.exports = class TicketManager {
 
 		try {
 			const ticket = await this.client.prisma.ticket.create({ data });
+
+			// the opening message was sent before the ticket existed, so messageCreate couldn't archive it (upstream #504)
+			if (category.guild.archive) {
+				this.archiver.saveMessage(ticket.id, sent).catch(error => this.client.log.error(error));
+			}
 			this.$count.categories[categoryId].total++;
 			this.$count.categories[categoryId][creator.id]++;
 
@@ -754,44 +759,17 @@ module.exports = class TicketManager {
 		}
 
 		try {
-			const workingHours = category.guild.workingHours;
-			const timezone = workingHours[0];
-			workingHours.shift(); // remove timezone
-			const now = spacetime.now(timezone);
-			const currentHours = workingHours[now.day()];
-			const start = now.time(currentHours[0]);
-			const end = now.time(currentHours[1]);
-			let working = true;
+			const status = getWorkingStatus(category.guild.workingHours);
+			const working = status.working;
 
-			if (currentHours[0] === currentHours[1] || now.isAfter(end)) { // staff have the day off or have finished for the day
-				// first look for the next working day *this* week (after today)
-				let nextIndex = workingHours.findIndex((hours, i) => i > now.day() && hours[0] !== hours[1]);
-				// if there isn't one, look for the next working day *next* week (before and including today's weekday)
-				if (!nextIndex) nextIndex = workingHours.findIndex((hours, i) => i <= now.day() && hours[0] !== hours[1]);
-				if (nextIndex) {
-					working = false;
-					const next = workingHours[nextIndex];
-					let then = now.add(nextIndex - now.day(), 'day');
-					if (nextIndex <= now.day()) then = then.add(1, 'week');
-					const timestamp = Math.ceil(then.time(next[0]).goto('utc').d.getTime() / 1000); // in seconds
-					channel.send({
-						embeds: [
-							new ExtendedEmbedBuilder()
-								.setColor(category.guild.primaryColour)
-								.setTitle(getMessage('ticket.working_hours.next.title'))
-								.setDescription(getMessage('ticket.working_hours.next.description', { timestamp })),
-						],
-					}).catch(this.client.log.error);
-				}
-			} else if (now.isBefore(start)) { // staff haven't started working yet
-				working = false;
-				const timestamp = Math.ceil(start.goto('utc').d.getTime() / 1000); // in seconds
+			if (!working && status.timestamp) {
+				const key = status.startsToday ? 'today' : 'next';
 				channel.send({
 					embeds: [
 						new ExtendedEmbedBuilder()
 							.setColor(category.guild.primaryColour)
-							.setTitle(getMessage('ticket.working_hours.today.title'))
-							.setDescription(getMessage('ticket.working_hours.today.description', { timestamp })),
+							.setTitle(getMessage(`ticket.working_hours.${key}.title`))
+							.setDescription(getMessage(`ticket.working_hours.${key}.description`, { timestamp: status.timestamp })),
 					],
 				}).catch(this.client.log.error);
 			}
@@ -801,7 +779,7 @@ module.exports = class TicketManager {
 				for (const [, member] of channel.members) {
 					if (member.user.bot) continue;
 					if (!await isStaff(channel.guild, member.id)) continue;
-					if (member.presence && member.presence !== 'offline') online++;
+					if (member.presence && member.presence.status !== 'offline') online++;
 				}
 				if (online === 0) {
 					channel.send({

@@ -146,12 +146,12 @@ module.exports = class TranscriptSlashCommand extends SlashCommand {
 		if (!ticket) throw new Error(`Ticket ${ticketId} does not exist`);
 
 		if (!this.shouldAllowAccess(interaction, ticket)) {
-			const settings = await client.prisma.guild.findUnique({ where: { id: interaction.guild.id } });
-			const getMessage = client.i18n.getLocale(settings.locale);
+			// may be used in DMs, so use the ticket's guild rather than `interaction.guild`
+			const getMessage = client.i18n.getLocale(ticket.guild.locale);
 			return await interaction.editReply({
 				embeds: [
 					new ExtendedEmbedBuilder({
-						iconURL: interaction.guild.iconURL(),
+						iconURL: client.guilds.cache.get(ticket.guildId)?.iconURL(),
 						text: ticket.guild.footer,
 					})
 						.setColor(ticket.guild.errorColour)

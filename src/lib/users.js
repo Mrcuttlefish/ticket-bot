@@ -50,9 +50,25 @@ const updateCommandPermissions = async (guild, token, staffRoles) => {
 		'move',
 		'priority',
 		'release',
-	].map(name => {
+	].map(async name => {
 		const command = client.application.commands.cache.find(cmd => cmd.name === name);
 		if (!command) return;
+		// `set` replaces every override, so keep the ones admins added themselves (upstream #537):
+		// user and channel overrides, and role denials (role allows are managed here via staff roles)
+		let existing = [];
+		try {
+			existing = await client.application.commands.permissions.fetch({
+				command,
+				guild,
+			});
+		} catch {
+			// no overrides yet
+		}
+		const custom = existing.filter(p =>
+			p.id !== guild.id &&
+			!staffRoles.includes(p.id) &&
+			(p.type !== ApplicationCommandPermissionType.Role || p.permission === false),
+		);
 		return client.application.commands.permissions.set({
 			command,
 			guild,
@@ -67,7 +83,14 @@ const updateCommandPermissions = async (guild, token, staffRoles) => {
 					permission: true,
 					type: ApplicationCommandPermissionType.Role,
 				})),
-			],
+				...custom.map(({
+					id, permission, type,
+				}) => ({
+					id,
+					permission,
+					type,
+				})),
+			].slice(0, 100), // Discord's limit
 			token,
 		});
 	}))

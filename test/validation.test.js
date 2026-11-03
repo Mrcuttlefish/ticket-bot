@@ -25,7 +25,7 @@ test('sanitize validates types', () => {
 	assert.throws(() => sanitize({ archive: { set: true } }, schemas.guildSettings), ValidationError);
 	assert.throws(() => sanitize({ logChannel: { connect: {} } }, schemas.guildSettings), ValidationError);
 	assert.throws(() => sanitize({ blocklist: ['not-an-id'] }, schemas.guildSettings), ValidationError);
-	assert.throws(() => sanitize({ autoClose: 2 ** 31 }, schemas.guildSettings), ValidationError);
+	assert.throws(() => sanitize({ autoClose: 2 ** 31 * 1000 }, schemas.guildSettings), ValidationError);
 	assert.throws(() => sanitize(null, schemas.guildSettings), ValidationError);
 });
 

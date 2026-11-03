@@ -22,6 +22,10 @@ if (process.env.DB_PROVIDER === 'sqlite' && !process.env.DB_CONNECTION_URL) {
 
 const prisma = new PrismaClient(prisma_options);
 
+// durations are stored in seconds but dumps use milliseconds, like the API and exports
+const { default: durationsMiddleware } = await import('../src/lib/middleware/prisma-durations.js');
+prisma.$use(durationsMiddleware);
+
 if (process.env.DB_PROVIDER === 'sqlite') {
 	const { default: sqliteMiddleware } = await import('../src/lib/middleware/prisma-sqlite.js');
 	prisma.$use(sqliteMiddleware);
