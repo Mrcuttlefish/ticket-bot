@@ -18,7 +18,9 @@
 		"start": "node .",
 		"studio": "npx prisma studio",
 		"test": "node scripts/check-i18n && node --test",
-		"__prepare": "husky install"
+		"__prepare": "husky install",
+		"test:coverage": "node scripts/check-i18n && node --test --experimental-test-coverage --test-coverage-include=src/** --test-coverage-lines=60 --test-coverage-branches=60 --test-coverage-functions=55",
+		"test:integration": "node --test --test-concurrency=1 \"test/integration/*.test.js\""
 	},
 	"commitlint": {
 		"extends": [

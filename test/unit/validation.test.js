@@ -5,7 +5,7 @@ const {
 	sanitize,
 	sanitizeCategory,
 	schemas,
-} = require('../src/lib/validation');
+} = require('../../src/lib/validation');
 
 const ROLE = '451745464480432129';
 
@@ -135,6 +135,11 @@ test('new ticket options are validated', () => {
 	assert.throws(() => sanitizeCategory({ roleLimits: [{ limit: 3 }] }), ValidationError);
 	assert.throws(() => sanitizeCategory({ pingRoleRules: [{ ping: 'x' }] }), ValidationError);
 	assert.throws(() => sanitizeCategory({ fallbackCategories: ['not-an-id'] }), ValidationError);
+});
+
+test('a null guild auto-close is stored as 0 (off), because the column is not nullable', () => {
+	assert.deepEqual(sanitize({ autoClose: null }, schemas.guildSettings), { autoClose: 0 });
+	assert.deepEqual(sanitize({ staleAfter: null }, schemas.guildSettings), { staleAfter: null });
 });
 
 test('working hours accept null (or []) for days off, as the settings site sends', () => {

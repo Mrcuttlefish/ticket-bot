@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const middleware = require('../src/lib/middleware/prisma-durations');
+const middleware = require('../../src/lib/middleware/prisma-durations');
 
 const DAY = 86_400_000;
 

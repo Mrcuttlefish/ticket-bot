@@ -1,3 +1,4 @@
+const { randomUUID } = require('node:crypto');
 const unzipper = require('unzipper');
 const { createInterface } = require('node:readline');
 const pkg = require('../../../../../../package.json');
@@ -103,21 +104,29 @@ module.exports.post = fastify => ({
 				}
 				return tag;
 			});
+			// questions get new IDs so a server can be copied to another one on the same instance
+			// (the old IDs would still be in use); answers are mapped to the new IDs
+			const questionMap = new Map();
 			const categories = settingsJSON.categories.map(raw => {
 				const {
 					data,
 					questions,
 				} = sanitizeCategory(raw);
-				data.questions = questions ?? [];
+				data.questions = (questions ?? []).map(question => {
+					const newId = randomUUID();
+					if (question.id) questionMap.set(question.id, newId);
+					return {
+						...question,
+						id: newId,
+					};
+				});
 				return data;
 			});
 
 			userLog.info('Importing general settings and tags');
 			await client.prisma.$transaction([
-				client.prisma.guild.delete({
-					select: { id: true },
-					where: { id },
-				}),
+				// deleteMany so importing into a guild with no settings row yet doesn't fail
+				client.prisma.guild.deleteMany({ where: { id } }),
 				client.prisma.guild.create({
 					data: {
 						...settings,
@@ -136,7 +145,6 @@ module.exports.post = fastify => ({
 					data: {
 						...category,
 						guild: { connect: { id } },
-						// question IDs are kept because answers reference them
 						questions: { createMany: { data: category.questions } },
 					},
 					select: { id: true },
@@ -164,11 +172,19 @@ module.exports.post = fastify => ({
 
 			for await (const line of lines) {
 				// do not await in the loop
-				ticketsPromises.push(pool.queue(worker => worker.importTicket(line, id, categoryMap)));
+				ticketsPromises.push(pool.queue(worker => worker.importTicket(line, id, categoryMap, questionMap)));
 			}
 
 			// TODO: batch 100 tickets per query?
-			const ticketsResolved = await Promise.all(ticketsPromises);
+			const allResolved = await Promise.all(ticketsPromises);
+			// ticket IDs are channel IDs, so they're unique across guilds; skip tickets that are already
+			// stored (e.g. copying a server on the same instance) instead of failing the whole import
+			const existing = new Set((await client.prisma.ticket.findMany({
+				select: { id: true },
+				where: { id: { in: allResolved.map(([ticket]) => ticket.id) } },
+			})).map(ticket => ticket.id));
+			if (existing.size > 0) userLog.warn(`Skipped ${existing.size} tickets that are already stored on this instance`);
+			const ticketsResolved = allResolved.filter(([ticket]) => !existing.has(ticket.id));
 			const importedIds = new Set(ticketsResolved.map(([ticket]) => ticket.id));
 			for (const [ticket] of ticketsResolved) {
 				// tickets can only reference other tickets from the same import

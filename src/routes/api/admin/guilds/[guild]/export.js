@@ -211,8 +211,13 @@ module.exports.get = fastify => ({
 		// 	}
 		// }
 
-		const icon = await fetch(iconURL(guild));
-		archive.append(Readable.from(icon.body), { name: 'icon.png' });
+		// the icon is optional; failing to download it (e.g. the CDN is down or blocked) mustn't fail the export
+		try {
+			const icon = await fetch(iconURL(guild), { signal: AbortSignal.timeout(5000) });
+			if (icon.ok) archive.append(Readable.from(icon.body), { name: 'icon.png' });
+		} catch (error) {
+			client.log.warn(`Couldn't download the icon for the export of "${guild.name}": ${error.message}`);
+		}
 		archive.append(JSON.stringify(settings), { name: 'settings.json' });
 		archive.append(ticketsStream, { name: 'tickets.jsonl' });
 		archive.finalize(); // ! do not await

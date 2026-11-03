@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { fillTagPlaceholders } = require('../src/lib/tags');
+const { fillTagPlaceholders } = require('../../src/lib/tags');
 
 test('tag placeholders are filled (upstream #438)', () => {
 	const out = fillTagPlaceholders('Hi {user} ({user.name}), see {channel} in {server}. Ticket #{ticket.number} by {ticket.creator}. {AUTHOR}', {

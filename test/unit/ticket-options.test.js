@@ -2,8 +2,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
 	getMemberLimit, getNumberBase, getPingRoles, pickDiscordCategory, resolveCategorySettings,
-} = require('../src/lib/tickets/options');
-const { shouldGhostPing } = require('../src/lib/tickets/ghost-ping');
+} = require('../../src/lib/tickets/options');
+const { shouldGhostPing } = require('../../src/lib/tickets/ghost-ping');
 
 const has = (...roles) => id => roles.includes(id);
 

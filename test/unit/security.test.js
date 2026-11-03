@@ -6,7 +6,7 @@ const {
 	escapeHTML,
 	includesIgnoreCase,
 	isSafeRedirect,
-} = require('../src/lib/security');
+} = require('../../src/lib/security');
 
 test('isSafeRedirect accepts same-origin paths', () => {
 	for (const path of ['/', '/settings', '/settings/123/categories/4?x=1#y']) {

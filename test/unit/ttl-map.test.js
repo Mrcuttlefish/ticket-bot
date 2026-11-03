@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const Keyv = require('keyv');
-const TTLMap = require('../src/lib/ttl-map');
+const TTLMap = require('../../src/lib/ttl-map');
 
 test('expired keys are swept even if never read again (upstream #659)', async () => {
 	const store = new TTLMap(60_000);

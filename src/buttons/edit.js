@@ -11,6 +11,7 @@ const {
 const emoji = require('node-emoji');
 const ExtendedEmbedBuilder = require('../lib/embed');
 const { isStaff } = require('../lib/users');
+const { buildQuestionInput } = require('../lib/tickets/question-input');
 const { pools } = require('../lib/threads');
 
 const { crypto } = pools;
@@ -98,17 +99,8 @@ module.exports = class EditButton extends Button {
 								.filter(a => a.question.type === 'TEXT') // TODO: remove this when modals support select menus
 								.map(async a => {
 									if (a.question.type === 'TEXT') {
-										const field = new TextInputBuilder()
-											.setCustomId(String(a.id))
-											.setLabel(a.question.label)
-											.setStyle(a.question.style)
-											.setMaxLength(Math.min(a.question.maxLength, 1000))
-											.setMinLength(a.question.minLength)
-											.setPlaceholder(a.question.placeholder)
-											.setRequired(a.question.required);
-										if (a.value) field.setValue(await crypto.queue(w => w.decrypt(a.value)));
-										else if (a.question.value) field.setValue(a.question.value);
-										return new ActionRowBuilder().setComponents(field);
+										const value = a.value ? await crypto.queue(w => w.decrypt(a.value)) : null;
+										return new ActionRowBuilder().setComponents(buildQuestionInput(a.question, value, a.id));
 									} else if (a.question.type === 'MENU') {
 										return new ActionRowBuilder()
 											.setComponents(

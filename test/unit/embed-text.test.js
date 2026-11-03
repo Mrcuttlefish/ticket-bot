@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { embedToText } = require('../src/lib/tickets/embed-text');
+const { embedToText } = require('../../src/lib/tickets/embed-text');
 
 test('archived embeds are rendered as text (upstream #504)', () => {
 	const text = embedToText({
