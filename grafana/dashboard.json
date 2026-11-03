@@ -1,0 +1,965 @@
+{
+	"__inputs": [
+		{
+			"description": "The Prometheus that scrapes the bot's /metrics",
+			"label": "Prometheus",
+			"name": "DS_PROMETHEUS",
+			"pluginId": "prometheus",
+			"pluginName": "Prometheus",
+			"type": "datasource"
+		}
+	],
+	"__requires": [
+		{
+			"id": "grafana",
+			"name": "Grafana",
+			"type": "grafana",
+			"version": "10.0.0"
+		},
+		{
+			"id": "prometheus",
+			"name": "Prometheus",
+			"type": "datasource",
+			"version": "1.0.0"
+		},
+		{
+			"id": "stat",
+			"name": "Stat",
+			"type": "panel",
+			"version": ""
+		},
+		{
+			"id": "timeseries",
+			"name": "Time series",
+			"type": "panel",
+			"version": ""
+		}
+	],
+	"annotations": {
+		"list": []
+	},
+	"description": "Tickets, queue and bot health from the Discord Tickets /metrics endpoint (upstream #363)",
+	"editable": true,
+	"graphTooltip": 1,
+	"links": [],
+	"panels": [
+		{
+			"collapsed": false,
+			"gridPos": {
+				"h": 1,
+				"w": 24,
+				"x": 0,
+				"y": 0
+			},
+			"id": 1,
+			"panels": [],
+			"title": "Tickets",
+			"type": "row"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "Tickets that are open now",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "blue",
+						"mode": "fixed"
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 0,
+				"y": 1
+			},
+			"id": 2,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "auto"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_tickets_open{instance=~\"$instance\"}",
+					"legendFormat": "",
+					"refId": "A"
+				}
+			],
+			"title": "Open tickets",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "Open tickets marked as stale (no activity)",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "orange",
+						"mode": "fixed"
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 4,
+				"y": 1
+			},
+			"id": 3,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "auto"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_tickets_stale{instance=~\"$instance\"}",
+					"legendFormat": "",
+					"refId": "A"
+				}
+			],
+			"title": "Stale tickets",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "Tickets created in the last 24 hours. The counter resets on restart; increase() handles that.",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "green",
+						"mode": "fixed"
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 8,
+				"y": 1
+			},
+			"id": 4,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "auto"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "sum(increase(discord_tickets_tickets_created_total{instance=~\"$instance\"}[24h]))",
+					"legendFormat": "",
+					"refId": "A"
+				}
+			],
+			"title": "Created (24h)",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "Tickets closed in the last 24 hours",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "purple",
+						"mode": "fixed"
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 12,
+				"y": 1
+			},
+			"id": 5,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "auto"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "sum(increase(discord_tickets_tickets_closed_total{instance=~\"$instance\"}[24h]))",
+					"legendFormat": "",
+					"refId": "A"
+				}
+			],
+			"title": "Closed (24h)",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "Tickets in the database, open and closed",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "text",
+						"mode": "fixed"
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 16,
+				"y": 1
+			},
+			"id": 6,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "auto"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_tickets{instance=~\"$instance\"}",
+					"legendFormat": "",
+					"refId": "A"
+				}
+			],
+			"title": "All tickets",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "Servers the bot is in",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "text",
+						"mode": "fixed"
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 20,
+				"y": 1
+			},
+			"id": 7,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "auto"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_guilds{instance=~\"$instance\"}",
+					"legendFormat": "",
+					"refId": "A"
+				}
+			],
+			"title": "Servers",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "How many tickets are waiting",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"drawStyle": "line",
+						"fillOpacity": 10,
+						"lineWidth": 2,
+						"showPoints": "never",
+						"stacking": {
+							"mode": "none"
+						}
+					},
+					"min": 0,
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 12,
+				"x": 0,
+				"y": 5
+			},
+			"id": 8,
+			"options": {
+				"legend": {
+					"displayMode": "list",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "none"
+				}
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_tickets_open{instance=~\"$instance\"}",
+					"legendFormat": "Open {{instance}}",
+					"refId": "A"
+				},
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_tickets_stale{instance=~\"$instance\"}",
+					"legendFormat": "Stale {{instance}}",
+					"refId": "B"
+				}
+			],
+			"title": "Open and stale tickets",
+			"type": "timeseries"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "If more are created than closed for a while, the queue is growing",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"drawStyle": "bars",
+						"fillOpacity": 40,
+						"lineWidth": 2,
+						"showPoints": "never",
+						"stacking": {
+							"mode": "none"
+						}
+					},
+					"min": 0,
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 12,
+				"x": 12,
+				"y": 5
+			},
+			"id": 9,
+			"options": {
+				"legend": {
+					"displayMode": "list",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "none"
+				}
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "sum by (instance) (increase(discord_tickets_tickets_created_total{instance=~\"$instance\"}[1h]))",
+					"legendFormat": "Created {{instance}}",
+					"refId": "A"
+				},
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "sum by (instance) (increase(discord_tickets_tickets_closed_total{instance=~\"$instance\"}[1h]))",
+					"legendFormat": "Closed {{instance}}",
+					"refId": "B"
+				}
+			],
+			"title": "Tickets created and closed per hour",
+			"type": "timeseries"
+		},
+		{
+			"collapsed": false,
+			"gridPos": {
+				"h": 1,
+				"w": 24,
+				"x": 0,
+				"y": 13
+			},
+			"id": 10,
+			"panels": [],
+			"title": "Bot",
+			"type": "row"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "The bot's version (from the info metric's label)",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "text",
+						"mode": "fixed"
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 0,
+				"y": 14
+			},
+			"id": 11,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "none",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "name"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_info{instance=~\"$instance\"}",
+					"legendFormat": "{{version}}",
+					"refId": "A"
+				}
+			],
+			"title": "Version",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "Time since the bot's process started",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "text",
+						"mode": "fixed"
+					},
+					"unit": "s"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 4,
+				"y": 14
+			},
+			"id": 12,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "auto"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_uptime_seconds{instance=~\"$instance\"}",
+					"legendFormat": "",
+					"refId": "A"
+				}
+			],
+			"title": "Uptime",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "Latency of the Discord gateway connection",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "text",
+						"mode": "fixed"
+					},
+					"unit": "ms"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 8,
+				"y": 14
+			},
+			"id": 13,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "auto"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_gateway_ping_milliseconds{instance=~\"$instance\"}",
+					"legendFormat": "",
+					"refId": "A"
+				}
+			],
+			"title": "Gateway ping",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "text",
+						"mode": "fixed"
+					},
+					"unit": "bytes"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 12,
+				"y": 14
+			},
+			"id": 14,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "auto"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_memory_rss_bytes{instance=~\"$instance\"}",
+					"legendFormat": "",
+					"refId": "A"
+				}
+			],
+			"title": "Memory (RSS)",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "Ticket categories across all servers",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "text",
+						"mode": "fixed"
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 16,
+				"y": 14
+			},
+			"id": 15,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "auto"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_categories{instance=~\"$instance\"}",
+					"legendFormat": "",
+					"refId": "A"
+				}
+			],
+			"title": "Categories",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "Tags across all servers",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"fixedColor": "text",
+						"mode": "fixed"
+					},
+					"unit": "short"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 4,
+				"w": 4,
+				"x": 20,
+				"y": 14
+			},
+			"id": 16,
+			"options": {
+				"colorMode": "value",
+				"graphMode": "area",
+				"justifyMode": "auto",
+				"reduceOptions": {
+					"calcs": [
+						"lastNotNull"
+					],
+					"fields": "",
+					"values": false
+				},
+				"textMode": "auto"
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_tags{instance=~\"$instance\"}",
+					"legendFormat": "",
+					"refId": "A"
+				}
+			],
+			"title": "Tags",
+			"type": "stat"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "Spikes usually mean Discord or network trouble; -1 means the bot isn't connected",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"drawStyle": "line",
+						"fillOpacity": 10,
+						"lineWidth": 2,
+						"showPoints": "never",
+						"stacking": {
+							"mode": "none"
+						}
+					},
+					"min": 0,
+					"unit": "ms"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 12,
+				"x": 0,
+				"y": 18
+			},
+			"id": 17,
+			"options": {
+				"legend": {
+					"displayMode": "list",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "none"
+				}
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_gateway_ping_milliseconds{instance=~\"$instance\"}",
+					"legendFormat": "{{instance}}",
+					"refId": "A"
+				}
+			],
+			"title": "Gateway ping",
+			"type": "timeseries"
+		},
+		{
+			"datasource": {
+				"type": "prometheus",
+				"uid": "${DS_PROMETHEUS}"
+			},
+			"description": "A steady climb that never drops may be a leak",
+			"fieldConfig": {
+				"defaults": {
+					"color": {
+						"mode": "palette-classic"
+					},
+					"custom": {
+						"drawStyle": "line",
+						"fillOpacity": 10,
+						"lineWidth": 2,
+						"showPoints": "never",
+						"stacking": {
+							"mode": "none"
+						}
+					},
+					"min": 0,
+					"unit": "bytes"
+				},
+				"overrides": []
+			},
+			"gridPos": {
+				"h": 8,
+				"w": 12,
+				"x": 12,
+				"y": 18
+			},
+			"id": 18,
+			"options": {
+				"legend": {
+					"displayMode": "list",
+					"placement": "bottom",
+					"showLegend": true
+				},
+				"tooltip": {
+					"mode": "multi",
+					"sort": "none"
+				}
+			},
+			"targets": [
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_memory_rss_bytes{instance=~\"$instance\"}",
+					"legendFormat": "RSS {{instance}}",
+					"refId": "A"
+				},
+				{
+					"datasource": {
+						"type": "prometheus",
+						"uid": "${DS_PROMETHEUS}"
+					},
+					"expr": "discord_tickets_memory_heap_used_bytes{instance=~\"$instance\"}",
+					"legendFormat": "Heap used {{instance}}",
+					"refId": "B"
+				}
+			],
+			"title": "Memory",
+			"type": "timeseries"
+		}
+	],
+	"refresh": "1m",
+	"schemaVersion": 39,
+	"tags": [
+		"discord-tickets"
+	],
+	"templating": {
+		"list": [
+			{
+				"current": {},
+				"datasource": {
+					"type": "prometheus",
+					"uid": "${DS_PROMETHEUS}"
+				},
+				"definition": "label_values(discord_tickets_info, instance)",
+				"includeAll": true,
+				"allValue": ".*",
+				"label": "Instance",
+				"multi": true,
+				"name": "instance",
+				"query": {
+					"query": "label_values(discord_tickets_info, instance)",
+					"refId": "instance"
+				},
+				"refresh": 2,
+				"sort": 1,
+				"type": "query"
+			}
+		]
+	},
+	"time": {
+		"from": "now-7d",
+		"to": "now"
+	},
+	"timezone": "",
+	"title": "Discord Tickets",
+	"uid": "discord-tickets",
+	"version": 1
+}

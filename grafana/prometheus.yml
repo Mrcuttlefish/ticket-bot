@@ -1,0 +1,11 @@
+# An example Prometheus scrape job for the bot's /metrics endpoint.
+# The endpoint is off unless the METRICS_TOKEN environment variable is set; use the same value here.
+scrape_configs:
+  - job_name: discord-tickets
+    scrape_interval: 30s # the bot caches its database counts for 30 seconds
+    scheme: https # or http if Prometheus reaches the bot directly
+    authorization:
+      credentials: your-METRICS_TOKEN
+    static_configs:
+      - targets:
+          - tickets.example.com # HTTP_EXTERNAL's host (and port, if it has one)
