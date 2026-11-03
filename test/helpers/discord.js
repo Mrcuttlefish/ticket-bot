@@ -256,9 +256,10 @@ function makeGuild(client, {
  * A fake interaction that records every response.
  */
 function makeInteraction({
-	member, channel = null, customId = null, fields = {}, options = {}, type = 'button', message = null,
+	member, channel = null, clicks = [], customId = null, fields = {}, options = {}, type = 'button', message = null,
 }) {
 	const responses = [];
+	const buttons = [];
 	const record = kind => async data => {
 		responses.push({
 			data,
@@ -268,6 +269,17 @@ function makeInteraction({
 		if (kind === 'reply' || kind === 'update') interaction.replied = true;
 		const reply = {
 			...data,
+			// `clicks` are the customIds (objects) of buttons the user presses on replies, in order; none means a timeout
+			awaitMessageComponent: async () => {
+				if (clicks.length === 0) throw new Error('Collector received no interactions before ending with reason: time');
+				const button = makeInteraction({
+					channel,
+					customId: JSON.stringify(clicks.shift()),
+					member,
+				});
+				buttons.push(button);
+				return button;
+			},
 			delete: async () => {},
 			edit: async edited => Object.assign(reply, edited),
 			id: snowflake(),
@@ -275,6 +287,7 @@ function makeInteraction({
 		return reply;
 	};
 	const interaction = {
+		buttons,
 		channel,
 		channelId: channel?.id,
 		client: member.guild.client,

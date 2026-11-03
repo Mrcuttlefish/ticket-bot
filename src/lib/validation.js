@@ -292,6 +292,7 @@ const category = {
 		type: 'int',
 	},
 	staffRoles: { type: 'snowflakes' },
+	suggestTags: { type: 'boolean' },
 	totalLimit: { type: 'int' },
 };
 

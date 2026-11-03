@@ -20,6 +20,7 @@ const { increment } = require('../metrics');
 const { sendTicketWebhook } = require('./webhook-events');
 const { isStaff } = require('../users');
 const { getWorkingStatus } = require('./working-hours');
+const { offerTags } = require('./tag-suggestions');
 const {
 	buildQuestionComponent, readAnswer,
 } = require('./question-input');
@@ -374,6 +375,7 @@ module.exports = class TicketManager {
 		]);
 
 		let answers;
+		const plainAnswers = [];
 		if (interaction.isModalSubmit()) {
 			if (action === 'questions') {
 				answers = await Promise.all(
@@ -381,6 +383,7 @@ module.exports = class TicketManager {
 						.slice(0, 5)
 						.map(async q => {
 							const value = readAnswer(interaction.fields, q);
+							if (value) plainAnswers.push(value);
 							return {
 								questionId: q.id,
 								userId: interaction.user.id,
@@ -400,6 +403,19 @@ module.exports = class TicketManager {
 		/** @type {import("discord.js").Guild} */
 		const guild = this.client.guilds.cache.get(category.guild.id);
 		const getMessage = this.client.i18n.getLocale(category.guild.locale);
+
+		// suggest tags that might solve the problem first (upstream #440)
+		if (category.suggestTags) {
+			const { proceed } = await offerTags({
+				category,
+				client: this.client,
+				getMessage,
+				interaction,
+				text: [topic, ...plainAnswers].filter(Boolean).join('\n'),
+			});
+			if (!proceed) return;
+		}
+
 		const creator = await guild.members.fetch(interaction.user.id);
 		const number = await this.getNextNumber(category.guild.id, category.guild.ticketNumberOffset);
 		const parent = this.pickDiscordCategory(guild, category);
