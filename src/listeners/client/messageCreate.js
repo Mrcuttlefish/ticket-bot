@@ -20,7 +20,9 @@ const {
 } = require('../../lib/tickets/anonymous');
 const { resolveCategorySettings } = require('../../lib/tickets/options');
 const { compileTagRegex } = require('../../lib/security');
-const { fillTagPlaceholders } = require('../../lib/tags');
+const {
+	fillTagPlaceholders, getGuildTags,
+} = require('../../lib/tags');
 const emoji = require('node-emoji');
 const { buttonEmoji } = require('../../lib/icons');
 
@@ -289,21 +291,7 @@ module.exports = class extends Listener {
 					(settings.autoTag.includes(message.channel.id))
 				)
 			) {
-				const cacheKey = `cache/guild-tags:${message.guild.id}`;
-				let tags = await client.keyv.get(cacheKey);
-				if (!tags) {
-					tags = (await client.prisma.tag.findMany({
-						select: {
-							content: true,
-							id: true,
-							name: true,
-							regex: true,
-						},
-						where: { guildId: message.guild.id },
-					}))
-						.sort((a, b) => (b.regex ? b.regex.length : 0) - (a.regex ? a.regex.length : 0));
-					client.keyv.set(cacheKey, tags, ms('1h'));
-				}
+				const tags = await getGuildTags(client, message.guild.id);
 
 				// patterns are validated when saved, but older ones may be invalid or unsafe; compileTagRegex skips those
 				const tag = tags.find(tag => compileTagRegex(tag.regex)?.test(message.content));

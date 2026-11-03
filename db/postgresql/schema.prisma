@@ -100,6 +100,7 @@ model Category {
   roleLimits         Json       @default("[]") // [{ role, limit }] overrides memberLimit
   staleAfter         Int? // seconds; null: use the guild setting, 0: off
   staffRoles         Json
+  suggestTags        Boolean    @default(false) // suggest matching tags before a ticket is created (upstream #440)
   tickets            Ticket[]
   totalLimit         Int        @default(50)
 
@@ -187,13 +188,14 @@ model QuestionAnswer {
 }
 
 model Tag {
-  content   String   @db.Text
-  createdAt DateTime @default(now())
-  guild     Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  guildId   String   @db.VarChar(19)
-  id        Int      @id @default(autoincrement())
-  name      String
-  regex     String?
+  content        String   @db.Text
+  createdAt      DateTime @default(now())
+  guild          Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guildId        String   @db.VarChar(19)
+  id             Int      @id @default(autoincrement())
+  name           String
+  preventedCount Int      @default(0) // tickets not opened because this tag solved the problem
+  regex          String?
 
   @@unique([guildId, name])
   @@map("tags")

@@ -34,4 +34,32 @@ function fillTagPlaceholders(content, {
 	});
 }
 
-module.exports = { fillTagPlaceholders };
+/**
+ * A guild's tags, cached for an hour (the tag routes clear the cache). Sorted with the longest patterns first.
+ * @param {import('client')} client
+ * @param {string} guildId
+ * @returns {Promise<{ content: string, id: number, name: string, regex: string | null }[]>}
+ */
+async function getGuildTags(client, guildId) {
+	const cacheKey = `cache/guild-tags:${guildId}`;
+	let tags = await client.keyv.get(cacheKey);
+	if (!tags) {
+		tags = (await client.prisma.tag.findMany({
+			select: {
+				content: true,
+				id: true,
+				name: true,
+				regex: true,
+			},
+			where: { guildId },
+		}))
+			.sort((a, b) => (b.regex ? b.regex.length : 0) - (a.regex ? a.regex.length : 0));
+		await client.keyv.set(cacheKey, tags, 60 * 60 * 1000);
+	}
+	return tags;
+}
+
+module.exports = {
+	fillTagPlaceholders,
+	getGuildTags,
+};
