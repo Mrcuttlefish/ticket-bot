@@ -20,15 +20,13 @@ if (process.env.DB_PROVIDER === 'sqlite' && !process.env.DB_CONNECTION_URL) {
 	prisma_options.datasources = { db: { url: 'file:' + join(process.cwd(), './user/database.db') } };
 }
 
-const prisma = new PrismaClient(prisma_options);
+// durations are stored in seconds but dumps use milliseconds (like the API and exports),
+// and SQLite JSON columns are (de)serialised
+const { default: { extendPrisma } } = await import('../src/lib/prisma.js');
+const prisma = extendPrisma(new PrismaClient(prisma_options), process.env.DB_PROVIDER);
 
-// durations are stored in seconds but dumps use milliseconds, like the API and exports
-const { default: durationsMiddleware } = await import('../src/lib/middleware/prisma-durations.js');
-prisma.$use(durationsMiddleware);
 
 if (process.env.DB_PROVIDER === 'sqlite') {
-	const { default: sqliteMiddleware } = await import('../src/lib/middleware/prisma-sqlite.js');
-	prisma.$use(sqliteMiddleware);
 	await prisma.$queryRaw`PRAGMA journal_mode=WAL;`;
 	await prisma.$queryRaw`PRAGMA synchronous=normal;`;
 }

@@ -12,8 +12,7 @@ const fs = require('fs');
 const { join } = require('path');
 const YAML = require('yaml');
 const TicketManager = require('./lib/tickets/manager');
-const sqliteMiddleware = require('./lib/middleware/prisma-sqlite');
-const durationsMiddleware = require('./lib/middleware/prisma-durations');
+const { extendPrisma } = require('./lib/prisma');
 const ms = require('ms');
 
 module.exports = class Client extends FrameworkClient {
@@ -134,12 +133,10 @@ module.exports = class Client extends FrameworkClient {
 		this.prisma.$on('warn', e => this.log.warn.prisma(`${e.target} ${e.message}`));
 		this.prisma.$on('query', e => this.log.debug.prisma(e));
 
-		// durations are stored in seconds but used in milliseconds
-		this.prisma.$use(durationsMiddleware);
+		// durations are stored in seconds but used in milliseconds, and SQLite JSON columns are (de)serialised
+		this.prisma = extendPrisma(this.prisma, process.env.DB_PROVIDER);
 
 		if (process.env.DB_PROVIDER === 'sqlite') {
-			// rewrite queries that use unsupported features
-			this.prisma.$use(sqliteMiddleware);
 			// make sqlite faster (missing parentheses are not a mistake, `$queryRaw` is a tagged template literal)
 			this.log.debug(await this.prisma.$queryRaw`PRAGMA journal_mode=WAL;`); // https://www.sqlite.org/wal.html
 			this.log.debug(await this.prisma.$queryRaw`PRAGMA synchronous=normal;`); // https://www.sqlite.org/pragma.html#pragma_synchronous
