@@ -74,6 +74,11 @@ module.exports = class CloseButton extends Button {
 
 					} finally { // this should run regardless of whatever happens above
 						client.tickets.$stale.delete(ticket.id);
+						// rejecting a close request counts as activity, so the stale check doesn't immediately close it
+						await client.prisma.ticket.update({
+							data: { lastMessageAt: new Date() },
+							where: { id: ticket.id },
+						}).catch(client.log.error);
 					}
 				}
 			}

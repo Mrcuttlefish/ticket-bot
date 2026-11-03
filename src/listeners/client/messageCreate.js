@@ -241,7 +241,7 @@ module.exports = class extends Listener {
 					for (const [, member] of message.channel.members) {
 						if (member.user.bot) continue;
 						if (!await isStaff(message.channel.guild, member.id)) continue;
-						if (member.presence && member.presence !== 'offline') online++;
+						if (member.presence && member.presence.status !== 'offline') online++;
 					}
 					if (online === 0 && ! await client.keyv.has(key)) {
 						await message.channel.send({

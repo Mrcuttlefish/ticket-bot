@@ -1,6 +1,6 @@
 const { SlashCommand } = require('@eartharoid/dbf');
 const {
-	ApplicationCommandOptionType, MessageFlags,
+	ApplicationCommandOptionType, MessageFlags, OverwriteType,
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { isStaff } = require('../../lib/users');
@@ -83,6 +83,19 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 
 		const creator = await interaction.guild.members.fetch(ticket.createdById);
 		const newCategory = await client.prisma.category.findUnique({ where: { id: interaction.options.getInteger('category', true) } });
+		if (!newCategory || newCategory.guildId !== interaction.guild.id) {
+			return await interaction.editReply({
+				embeds: [
+					new ExtendedEmbedBuilder({
+						iconURL: interaction.guild.iconURL(),
+						text: ticket.guild.footer,
+					})
+						.setColor(ticket.guild.errorColour)
+						.setTitle(getMessage('misc.unknown_category.title'))
+						.setDescription(getMessage('misc.unknown_category.description')),
+				],
+			});
+		}
 		const discordCategory = await interaction.guild.channels.fetch(newCategory.discordCategory);
 
 		if (discordCategory.children.cache.size === 50) {
@@ -130,7 +143,7 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 			// these 3 could be done separately,
 			// but using `setParent`, `setName` etc instead of a single `edit` call increases the number of API requests
 			if (
-				newCategory.staffRoles !== ticket.category.staffRoles ||
+				JSON.stringify(newCategory.staffRoles) !== JSON.stringify(ticket.category.staffRoles) ||
 				newCategory.channelName !== ticket.category.channelName ||
 				newCategory.discordCategory !== ticket.category.discordCategory
 			) {
@@ -156,10 +169,25 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 							allow,
 							id: creator.id,
 						},
-						...newCategory.staffRoles.map(id => ({
-							allow,
-							id,
-						})),
+						// keep members that were added to the ticket, and the claimer (upstream #514)
+						...interaction.channel.permissionOverwrites.cache
+							.filter(o => o.type === OverwriteType.Member && o.id !== creator.id && o.id !== this.client.user.id)
+							.map(o => ({
+								allow: o.allow,
+								deny: o.deny,
+								id: o.id,
+								type: OverwriteType.Member,
+							})),
+						// if the ticket is claimed, staff roles stay hidden like they are after /claim
+						...newCategory.staffRoles.map(id => (ticket.claimedById
+							? {
+								deny: ['ViewChannel'],
+								id,
+							}
+							: {
+								allow,
+								id,
+							})),
 					],
 					reason: `Moved by ${interaction.user.tag}`,
 				});

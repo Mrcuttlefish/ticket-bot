@@ -284,6 +284,9 @@ commands:
       not_staff:
         description: Only staff members can open tickets for other members.
         title: ❌ Error
+      not_target:
+        description: This button is for {user}. Ask a staff member if you need a ticket.
+        title: ❌ Error
       prompt:
         description: Click the button below to create a ticket.
         title: Please create a ticket
