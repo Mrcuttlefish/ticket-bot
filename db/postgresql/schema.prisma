@@ -68,8 +68,13 @@ model ArchivedUser {
 }
 
 model Category {
+  archive            Boolean? // null: use the guild setting
+  autoClose          Int? // seconds; null: use the guild setting, 0: off
+  blockedRoles       Json       @default("[]") // in addition to the guild blocklist
   channelName        String
+  claimButton        Boolean? // null: use the guild setting
   claiming           Boolean    @default(false)
+  closeButton        Boolean? // null: use the guild setting
   createdAt          DateTime   @default(now())
   cooldown           Int? // seconds
   customTopic        String?
@@ -92,6 +97,7 @@ model Category {
   requiredRoles      Json       @default("[]")
   requireTopic       Boolean    @default(false)
   roleLimits         Json       @default("[]") // [{ role, limit }] overrides memberLimit
+  staleAfter         Int? // seconds; null: use the guild setting, 0: off
   staffRoles         Json
   tickets            Ticket[]
   totalLimit         Int        @default(50)

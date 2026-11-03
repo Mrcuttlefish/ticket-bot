@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-	getMemberLimit, getNumberBase, getPingRoles, pickDiscordCategory,
+	getMemberLimit, getNumberBase, getPingRoles, pickDiscordCategory, resolveCategorySettings,
 } = require('../src/lib/tickets/options');
 const { shouldGhostPing } = require('../src/lib/tickets/ghost-ping');
 
@@ -116,4 +116,43 @@ test('ghost ping: only staff replies to an inactive creator, once (upstream #346
 		...base,
 		isCreator: true,
 	}), false);
+});
+
+test('categories can override guild settings (upstream #536, PR #495)', () => {
+	const guild = {
+		archive: true,
+		autoClose: 43200000,
+		blocklist: ['banned'],
+		claimButton: false,
+		closeButton: true,
+		staleAfter: 86400000,
+	};
+	assert.deepEqual(resolveCategorySettings(guild, null), {
+		archive: true,
+		autoClose: 43200000,
+		blockedRoles: ['banned'],
+		claimButton: false,
+		closeButton: true,
+		staleAfter: 86400000,
+	});
+	assert.deepEqual(resolveCategorySettings(guild, {
+		archive: false,
+		autoClose: null,
+		blockedRoles: ['muted', 'banned'],
+		claimButton: true,
+		closeButton: null,
+		staleAfter: 0,
+	}), {
+		archive: false,
+		autoClose: 43200000,
+		blockedRoles: ['banned', 'muted'],
+		claimButton: true,
+		closeButton: true,
+		staleAfter: null, // 0 turns it off for this category
+	});
+	// existing categories (before the migration ran) have no overrides
+	assert.equal(resolveCategorySettings({
+		...guild,
+		staleAfter: null,
+	}, { staleAfter: 3600000 }).staleAfter, 3600000);
 });

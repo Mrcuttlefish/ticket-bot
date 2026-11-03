@@ -54,9 +54,35 @@ function getNumberBase(max, offset = 0) {
 	return Math.max(max ?? 0, offset ?? 0);
 }
 
+const CATEGORY_OVERRIDES = ['archive', 'autoClose', 'claimButton', 'closeButton', 'staleAfter'];
+
+/**
+ * Settings that a category can override (upstream #536). A category value of `null` uses the guild's setting.
+ * A category's stale-after or auto-close of 0 turns it off for that category.
+ * Blocked roles are combined: the guild's blocklist and the category's (upstream PR #495).
+ * @param {object} guild
+ * @param {object | null} [category]
+ * @returns {{ archive: boolean, autoClose: number | null, blockedRoles: string[], claimButton: boolean,
+ * closeButton: boolean, staleAfter: number | null }}
+ */
+function resolveCategorySettings(guild, category) {
+	const settings = {};
+	for (const key of CATEGORY_OVERRIDES) {
+		const value = category?.[key];
+		settings[key] = value === null || value === undefined ? guild[key] : value;
+	}
+	for (const key of ['autoClose', 'staleAfter']) {
+		if (!settings[key]) settings[key] = null; // 0 means off
+	}
+	settings.blockedRoles = [...new Set([...(guild.blocklist ?? []), ...(category?.blockedRoles ?? [])])];
+	return settings;
+}
+
 module.exports = {
+	CATEGORY_OVERRIDES,
 	getMemberLimit,
 	getNumberBase,
 	getPingRoles,
 	pickDiscordCategory,
+	resolveCategorySettings,
 };

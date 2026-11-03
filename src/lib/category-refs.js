@@ -12,7 +12,7 @@ const { ValidationError } = require('./validation');
  */
 function checkCategoryRefs(guild, data, getChannel) {
 	const hasRole = id => guild.roles.cache.has(id);
-	for (const field of ['staffRoles', 'pingRoles', 'requiredRoles']) {
+	for (const field of ['blockedRoles', 'staffRoles', 'pingRoles', 'requiredRoles']) {
 		if (data[field]) data[field] = data[field].filter(hasRole);
 	}
 	if (data.roleLimits) data.roleLimits = data.roleLimits.filter(rule => hasRole(rule.role));
