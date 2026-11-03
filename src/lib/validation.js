@@ -167,6 +167,7 @@ const guildSettings = {
 	claimButton: { type: 'boolean' },
 	closeButton: { type: 'boolean' },
 	closeRequests: { type: 'boolean' },
+	componentsV2: { type: 'boolean' },
 	errorColour: {
 		options: { max: 32 },
 		type: 'string',

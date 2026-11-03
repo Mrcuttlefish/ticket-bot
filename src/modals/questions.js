@@ -2,6 +2,7 @@ const { Modal } = require('@eartharoid/dbf');
 const {
 	EmbedBuilder, MessageFlags,
 } = require('discord.js');
+const { editOpeningDetails } = require('../lib/tickets/opening-message');
 const ExtendedEmbedBuilder = require('../lib/embed');
 const { logTicketEvent } = require('../lib/logging');
 const { pools } = require('../lib/threads');
@@ -93,17 +94,11 @@ module.exports = class QuestionsModal extends Modal {
 			if (topic && channelTopic !== null) await interaction.channel.setTopic(channelTopic);
 
 			const opening = await interaction.channel.messages.fetch(ticket.openingMessageId);
-			if (opening && opening.embeds.length >= 2) {
-				const embeds = [...opening.embeds];
-				embeds[1] = new EmbedBuilder(embeds[1].data)
-					.setFields(
-						plainTextAnswers
-							.map(a => ({
-								name: a.question.label,
-								value: a.after || getMessage('ticket.answers.no_value'),
-							})),
-					);
-				await opening.edit({ embeds });
+			if (opening) {
+				await editOpeningDetails(opening, plainTextAnswers.map(a => ({
+					name: a.question.label,
+					value: a.after || getMessage('ticket.answers.no_value'),
+				})));
 			}
 
 			await interaction.editReply({

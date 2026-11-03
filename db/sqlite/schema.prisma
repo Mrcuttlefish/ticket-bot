@@ -129,6 +129,7 @@ model Guild {
   claimButton        Boolean    @default(false)
   closeButton        Boolean    @default(false)
   closeRequests      Boolean    @default(true)
+  componentsV2       Boolean    @default(false) // send opening messages and panels with Discord's layout components (upstream #655)
   createdAt          DateTime   @default(now())
   errorColour        String     @default("Red")
   feedback           Feedback[]
