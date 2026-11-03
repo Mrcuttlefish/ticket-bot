@@ -15,6 +15,8 @@ const ExtendedEmbedBuilder = require('../embed');
 // relayed messages are sent with a nonce starting with this, so the archiver can skip them (the original is
 // archived instead) without waiting for `send()` to resolve
 const NONCE_PREFIX = 'anon';
+// replies sent from the portal (portal.js) are archived by the route, with their real author
+const WEB_NONCE_PREFIX = 'web';
 
 /**
  * @param {object} options
@@ -42,6 +44,15 @@ function shouldRelay({
  */
 function isRelay(message, clientUserId) {
 	return message.author?.id === clientUserId && typeof message.nonce === 'string' && message.nonce.startsWith(NONCE_PREFIX);
+}
+
+/**
+ * @param {import('discord.js').Message} message
+ * @param {string} clientUserId
+ * @returns {boolean} whether the message is a reply sent from the portal
+ */
+function isWebReply(message, clientUserId) {
+	return message.author?.id === clientUserId && typeof message.nonce === 'string' && message.nonce.startsWith(WEB_NONCE_PREFIX);
 }
 
 /**
@@ -113,8 +124,10 @@ function anonymiseTranscript(ticket, staffName) {
 
 module.exports = {
 	NONCE_PREFIX,
+	WEB_NONCE_PREFIX,
 	anonymiseTranscript,
 	isRelay,
+	isWebReply,
 	relayMessage,
 	shouldRelay,
 };

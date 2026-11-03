@@ -16,7 +16,7 @@ const {
 const ms = require('ms');
 const { handleGhostPing } = require('../../lib/tickets/ghost-ping');
 const {
-	isRelay, relayMessage, shouldRelay,
+	isRelay, isWebReply, relayMessage, shouldRelay,
 } = require('../../lib/tickets/anonymous');
 const { resolveCategorySettings } = require('../../lib/tickets/options');
 const { compileTagRegex } = require('../../lib/security');
@@ -197,8 +197,9 @@ module.exports = class extends Listener {
 
 			if (ticket) {
 				// archive messages (categories can override the archive setting, upstream #536)
-				// relays of anonymous staff messages aren't archived; the original was archived with its real author
-				if (resolveCategorySettings(settings, ticket.category).archive && !isRelay(message, client.user.id)) {
+				// relays of anonymous staff messages aren't archived (the original was archived with its real author), and
+				// neither are portal replies (the route archives them with their real author)
+				if (resolveCategorySettings(settings, ticket.category).archive && !isRelay(message, client.user.id) && !isWebReply(message, client.user.id)) {
 					client.tickets.archiver.saveMessage(ticket.id, message)
 						.catch(error => {
 							client.log.warn('Failed to archive message', message.id);

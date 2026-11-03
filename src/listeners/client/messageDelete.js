@@ -5,6 +5,7 @@ const {
 } = require('discord.js');
 const { logMessageEvent } = require('../../lib/logging');
 const { pools } = require('../../lib/threads');
+const { getPortalEvents } = require('../../lib/tickets/portal');
 
 const { crypto } = pools;
 
@@ -49,6 +50,10 @@ module.exports = class extends Listener {
 				await client.prisma.archivedMessage.update({
 					data: { deleted: true },
 					where: { id: message.id },
+				});
+				getPortalEvents(client).emit('message-deleted', {
+					messageId: message.id,
+					ticketId: ticket.id,
 				});
 				const archived = await client.prisma.archivedMessage.findUnique({ where: { id: message.id } });
 				if (archived?.content) {

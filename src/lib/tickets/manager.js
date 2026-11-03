@@ -1,6 +1,7 @@
 /* eslint-disable no-underscore-dangle */
 /* eslint-disable max-lines */
 const TicketArchiver = require('./archiver');
+const { getPortalEvents } = require('./portal');
 const {
 	ActionRowBuilder,
 	ButtonBuilder,
@@ -1176,6 +1177,7 @@ module.exports = class TicketManager {
 				where: { id: ticket.id },
 			});
 			if (this.$stale.has(ticketId)) this.$stale.delete(ticketId);
+			getPortalEvents(this.client).emit('ticket-closed', { ticketId });
 			this.$count.categories[ticket.categoryId] ??= {};
 			this.$count.categories[ticket.categoryId].total -= 1;
 			this.$count.categories[ticket.categoryId][ticket.createdById] -= 1;
