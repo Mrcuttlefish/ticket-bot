@@ -1,1 +1,0 @@
-const t=[["language",{t:"Language"}],["logout",{t:"Log out"}],["settings_panel",{t:"Settings Panel"}],["staff_dashboard",{t:"Staff Dashboard"}],["theme",{t:"Theme"}],["title",{t:" -  Portal",p:[[0,{v:"guild"}],[3,{v:"client"}]]}]],a="tmp",e={json:t,locale_id:a};export{e as default,t as json,a as locale_id};
