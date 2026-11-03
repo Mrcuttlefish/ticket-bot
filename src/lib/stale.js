@@ -9,6 +9,7 @@ const {
 	ButtonStyle,
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('./embed');
+const { buttonEmoji } = require('./icons');
 
 module.exports = async function handleStaleTickets(client, staleInterval) {
 	client.log.info.cron('Handling stale tickets');
@@ -114,7 +115,7 @@ module.exports = async function handleStaleTickets(client, staleInterval) {
 								new ButtonBuilder()
 									.setCustomId(JSON.stringify({ action: 'close' }))
 									.setStyle(ButtonStyle.Danger)
-									.setEmoji(getMessage('buttons.close.emoji'))
+									.setEmoji(buttonEmoji(getMessage, 'close'))
 									.setLabel(getMessage('buttons.close.text')),
 							),
 					],

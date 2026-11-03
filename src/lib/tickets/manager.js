@@ -40,6 +40,7 @@ const {
 	getAverageTimes, getAverageRating,
 } = require('../stats');
 const { pools } = require('../threads');
+const { buttonEmoji } = require('../icons');
 
 const { crypto } = pools;
 
@@ -639,7 +640,7 @@ module.exports = class TicketManager {
 											ticket: referencesTicketId,
 										}))
 										.setStyle(ButtonStyle.Primary)
-										.setEmoji(getMessage('buttons.transcript.emoji'))
+										.setEmoji(buttonEmoji(getMessage, 'transcript'))
 										.setLabel(getMessage('buttons.transcript.text')),
 
 								),
@@ -1087,7 +1088,7 @@ module.exports = class TicketManager {
 								...closeButtonId,
 							}))
 							.setStyle(ButtonStyle.Success)
-							.setEmoji(getMessage('buttons.accept_close_request.emoji'))
+							.setEmoji(buttonEmoji(getMessage, 'accept_close_request'))
 							.setLabel(getMessage('buttons.accept_close_request.text')),
 						new ButtonBuilder()
 							.setCustomId(JSON.stringify({
@@ -1095,7 +1096,7 @@ module.exports = class TicketManager {
 								...closeButtonId,
 							}))
 							.setStyle(ButtonStyle.Danger)
-							.setEmoji(getMessage('buttons.reject_close_request.emoji'))
+							.setEmoji(buttonEmoji(getMessage, 'reject_close_request'))
 							.setLabel(getMessage('buttons.reject_close_request.text')),
 					),
 			],
@@ -1222,7 +1223,7 @@ module.exports = class TicketManager {
 								ticket: ticket.id,
 							}))
 							.setStyle(ButtonStyle.Primary)
-							.setEmoji(getMessage('buttons.transcript.emoji'))
+							.setEmoji(buttonEmoji(getMessage, 'transcript'))
 							.setLabel(getMessage('buttons.transcript.text')),
 
 					),

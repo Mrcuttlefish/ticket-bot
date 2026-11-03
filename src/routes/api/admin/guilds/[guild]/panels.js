@@ -12,6 +12,7 @@ const {
 const emoji = require('node-emoji');
 const { logAdminEvent } = require('../../../../../lib/logging');
 const { buildPanel } = require('../../../../../lib/panel');
+const { buttonEmoji } = require('../../../../../lib/icons');
 
 module.exports.post = fastify => ({
 	handler: async (req, res) => {
@@ -130,7 +131,7 @@ module.exports.post = fastify => ({
 						}))
 						.setStyle(Primary)
 						.setLabel(getMessage('buttons.create.text'))
-						.setEmoji(getMessage('buttons.create.emoji')),
+						.setEmoji(buttonEmoji(getMessage, 'create')),
 				);
 			} else if (data.type === 'BUTTON') {
 				// button panels use each category's name and emoji, even with a single category (upstream #450, #616)

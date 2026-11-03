@@ -9,6 +9,7 @@ const {
 	sendToHouston,
 } = require('../../lib/stats');
 const handleStaleTickets = require('../../lib/stale');
+const { syncIcons } = require('../../lib/icons');
 
 module.exports = class extends Listener {
 	constructor(client, options) {
@@ -49,6 +50,16 @@ module.exports = class extends Listener {
 
 		// commands are not cached automatically
 		await client.application.commands.fetch();
+
+		// custom icons (upstream #590); buttons use the locale's emojis until (or unless) this succeeds
+		if (client.config.icons) {
+			syncIcons(client)
+				.then(icons => client.log.success('Using %d custom icons', icons.size))
+				.catch(error => {
+					client.log.warn('Failed to upload the custom icons, so buttons will use the default emojis');
+					client.log.error(error);
+				});
+		}
 
 		// presence/activity
 		if (client.config.presence.activities?.length > 0) {

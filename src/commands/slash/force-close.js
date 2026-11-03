@@ -10,6 +10,7 @@ const {
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { isStaff } = require('../../lib/users');
 const ms = require('ms');
+const { buttonEmoji } = require('../../lib/icons');
 
 module.exports = class ForceCloseSlashCommand extends SlashCommand {
 	constructor(client, options) {
@@ -174,7 +175,7 @@ module.exports = class ForceCloseSlashCommand extends SlashCommand {
 									id: 'close',
 								}))
 								.setStyle(ButtonStyle.Danger)
-								.setEmoji(getMessage('buttons.close.emoji'))
+								.setEmoji(buttonEmoji(getMessage, 'close'))
 								.setLabel(getMessage('buttons.close.text')),
 							new ButtonBuilder()
 								.setCustomId(JSON.stringify({
@@ -182,7 +183,7 @@ module.exports = class ForceCloseSlashCommand extends SlashCommand {
 									id: 'cancel',
 								}))
 								.setStyle(ButtonStyle.Secondary)
-								.setEmoji(getMessage('buttons.cancel.emoji'))
+								.setEmoji(buttonEmoji(getMessage, 'cancel'))
 								.setLabel(getMessage('buttons.cancel.text')),
 						]),
 				],
