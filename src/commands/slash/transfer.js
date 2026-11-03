@@ -5,6 +5,9 @@ const {
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { isStaff } = require('../../lib/users');
+const {
+	formatChannelName, formatChannelTopic,
+} = require('../../lib/tickets/placeholders');
 const { pools } = require('../../lib/threads');
 
 const { crypto } = pools;
@@ -100,10 +103,11 @@ module.exports = class TransferSlashCommand extends SlashCommand {
 			});
 		}
 
-		const channelName = ticket.category.channelName
-			.replace(/{+\s?(user)?name\s?}+/gi, member.user.username)
-			.replace(/{+\s?(nick|display)(name)?\s?}+/gi, member.displayName)
-			.replace(/{+\s?num(ber)?\s?}+/gi, ticket.number === 1488 ? '1487b' : ticket.number);
+		const channelName = formatChannelName(ticket.category.channelName, {
+			displayName: member.displayName,
+			number: ticket.number,
+			username: member.user.username,
+		});
 
 		await Promise.all([
 			client.prisma.ticket.update({
@@ -119,7 +123,11 @@ module.exports = class TransferSlashCommand extends SlashCommand {
 			}),
 			interaction.channel.edit({
 				name: channelName,
-				topic: `${member.toString()}${ticket.topic && ` | ${await crypto.queue(w => w.decrypt(ticket.topic))}`}`,
+				topic: formatChannelTopic(
+					client.config.tickets?.channelTopic,
+					member.toString(),
+					ticket.topic && await crypto.queue(w => w.decrypt(ticket.topic)),
+				) ?? '',
 			}),
 			interaction.channel.permissionOverwrites.edit(
 				member,

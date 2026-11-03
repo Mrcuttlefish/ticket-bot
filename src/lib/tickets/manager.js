@@ -19,6 +19,9 @@ const ExtendedEmbedBuilder = require('../embed');
 const { logTicketEvent } = require('../logging');
 const { isStaff } = require('../users');
 const { getWorkingStatus } = require('./working-hours');
+const {
+	formatChannelName, formatChannelTopic, formatOpeningMessage,
+} = require('./placeholders');
 const { Collection } = require('discord.js');
 
 const { getSUID } = require('../logging');
@@ -400,10 +403,11 @@ module.exports = class TicketManager {
 		const getMessage = this.client.i18n.getLocale(category.guild.locale);
 		const creator = await guild.members.fetch(interaction.user.id);
 		const number = await this.getNextNumber(category.guild.id);
-		const channelName = category.channelName
-			.replace(/{+\s?(user)?name\s?}+/gi, creator.user.username)
-			.replace(/{+\s?(nick|display)(name)?\s?}+/gi, creator.displayName)
-			.replace(/{+\s?num(ber)?\s?}+/gi, number === 1488 ? '1487b' : number);
+		const channelName = formatChannelName(category.channelName, {
+			displayName: creator.displayName,
+			number,
+			username: creator.user.username,
+		});
 		const allow = ['ViewChannel', 'ReadMessageHistory', 'SendMessages', 'EmbedLinks', 'AttachFiles'];
 		/** @type {import("discord.js").TextChannel} */
 		const channel = await guild.channels.create({
@@ -429,7 +433,7 @@ module.exports = class TicketManager {
 			],
 			rateLimitPerUser: category.ratelimit,
 			reason: `${creator.user.tag} created a ticket`,
-			topic: `${creator}${topic?.length > 0 ? ` | ${topic}` : ''}`,
+			topic: formatChannelTopic(this.client.config.tickets?.channelTopic, creator.toString(), topic) ?? undefined,
 		});
 
 		const needsStats = /{+\s?(avgResponseTime|avgResolutionTime|avgRating)\s?}+/i.test(category.openingMessage);
@@ -469,13 +473,15 @@ module.exports = class TicketManager {
 					iconURL: creator.displayAvatarURL(),
 					name: creator.displayName,
 				})
+				// an empty opening message is allowed (upstream #534); the embed keeps the creator and image
 				.setDescription(
-					category.openingMessage
-						.replace(/{+\s?(user)?name\s?}+/gi, creator.user.toString())
-						.replace(/{+\s?num(ber)?\s?}+/gi, number)
-						.replace(/{+\s?avgResponseTime\s?}+/gi, stats?.avgResponseTime)
-						.replace(/{+\s?avgResolutionTime\s?}+/gi, stats?.avgResolutionTime)
-						.replace(/{+\s?avgRating\s?}+/gi, stats?.avgRating),
+					formatOpeningMessage(category.openingMessage, {
+						...stats,
+						category,
+						creator,
+						number,
+						topic,
+					}).trim() || null,
 				),
 		];
 

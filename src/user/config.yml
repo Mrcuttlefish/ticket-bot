@@ -22,6 +22,7 @@ logs:
   level: info
 presence:
   activities:
+    # type: 0 playing, 2 listening, 3 watching, 4 custom status (just the text), 5 competing
     - name: /new
     - name: with {totalTickets} tickets
     - name: "{openTickets} tickets"
@@ -33,6 +34,10 @@ presence:
   interval: 20
   status: online
 stats: true
+tickets:
+  # what goes in a ticket channel's topic (anyone who can see the audit log can see it):
+  # full ("@creator | topic"), topic, creator, or none
+  channelTopic: full
 templates:
   transcript: transcript.md
 updates: true

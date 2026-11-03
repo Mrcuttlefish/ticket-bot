@@ -8,6 +8,8 @@ const { pools } = require('../lib/threads');
 
 const { crypto } = pools;
 
+const { formatChannelTopic } = require('../lib/tickets/placeholders');
+
 module.exports = class TopicModal extends Modal {
 	constructor(client, options) {
 		super(client, {
@@ -47,7 +49,8 @@ module.exports = class TopicModal extends Modal {
 			});
 			const getMessage = client.i18n.getLocale(ticket.guild.locale);
 
-			if (topic) interaction.channel.setTopic(`<@${ticket.createdById}> | ${topic}`);
+			const channelTopic = formatChannelTopic(client.config.tickets?.channelTopic, `<@${ticket.createdById}>`, topic);
+			if (topic && channelTopic !== null) interaction.channel.setTopic(channelTopic);
 
 			const opening = await interaction.channel.messages.fetch(ticket.openingMessageId);
 			if (opening && opening.embeds.length >= 2) {

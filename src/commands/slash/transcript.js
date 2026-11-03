@@ -9,6 +9,7 @@ const { join } = require('path');
 const Mustache = require('mustache');
 const { AttachmentBuilder } = require('discord.js');
 const ExtendedEmbedBuilder = require('../../lib/embed');
+const { formatChannelName } = require('../../lib/tickets/placeholders');
 const { pools } = require('../../lib/threads');
 
 const { transcript: pool } = pools;
@@ -68,10 +69,11 @@ module.exports = class TranscriptSlashCommand extends SlashCommand {
 
 		ticket = await pool.queue(w => w(ticket));
 
-		const channelName = ticket.category.channelName
-			.replace(/{+\s?(user)?name\s?}+/gi, ticket.createdBy?.username)
-			.replace(/{+\s?(nick|display)(name)?\s?}+/gi, ticket.createdBy?.displayName)
-			.replace(/{+\s?num(ber)?\s?}+/gi, ticket.number);
+		const channelName = formatChannelName(ticket.category.channelName, {
+			displayName: ticket.createdBy?.displayName,
+			number: ticket.number,
+			username: ticket.createdBy?.username,
+		});
 		const fileName = `${channelName}.${this.client.config.templates.transcript.split('.').slice(-1)[0]}`;
 		const transcript = Mustache.render(this.template, {
 			channelName,
