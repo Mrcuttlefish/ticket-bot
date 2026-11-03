@@ -136,3 +136,10 @@ test('new ticket options are validated', () => {
 	assert.throws(() => sanitizeCategory({ pingRoleRules: [{ ping: 'x' }] }), ValidationError);
 	assert.throws(() => sanitizeCategory({ fallbackCategories: ['not-an-id'] }), ValidationError);
 });
+
+test('working hours accept null (or []) for days off, as the settings site sends', () => {
+	const workingHours = ['Europe/London', null, ['09:00', '17:00'], ['09:00', '17:00'], ['09:00', '17:00'], ['09:00', '17:00'], ['09:00', '17:00'], []];
+	assert.deepEqual(sanitize({ workingHours }, schemas.guildSettings).workingHours, ['Europe/London', null, ['09:00', '17:00'], ['09:00', '17:00'], ['09:00', '17:00'], ['09:00', '17:00'], ['09:00', '17:00'], null]);
+	assert.throws(() => sanitize({ workingHours: ['UTC', '9-5', null, null, null, null, null, null] }, schemas.guildSettings), ValidationError);
+	assert.throws(() => sanitize({ workingHours: ['UTC', null] }, schemas.guildSettings), ValidationError);
+});

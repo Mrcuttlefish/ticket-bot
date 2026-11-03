@@ -116,3 +116,9 @@ test('holiday dates use the working hours timezone', () => {
 test('a holiday on a day off changes nothing', () => {
 	assert.deepEqual(getWorkingStatus(weekdays('Europe/London'), at('2026-11-03T10:30:00'), ['2026-11-01']), { working: true });
 });
+
+test('null days are days off', () => {
+	const hours = ['Europe/London', null, NINE_TO_FIVE, NINE_TO_FIVE, NINE_TO_FIVE, NINE_TO_FIVE, NINE_TO_FIVE, null];
+	assert.equal(getWorkingStatus(hours, at('2026-11-01T10:00:00')).working, false); // Sunday
+	assert.equal(getWorkingStatus(hours, at('2026-11-02T10:00:00')).working, true); // Monday
+});

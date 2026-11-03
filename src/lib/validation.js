@@ -107,13 +107,16 @@ const workingHours = (value, field) => {
 	if (!Array.isArray(value) || value.length !== 8 || typeof value[0] !== 'string') {
 		throw new ValidationError(field, 'expected [timezone, ...7 days]');
 	}
-	for (let i = 1; i < 8; i++) {
-		const day = value[i];
+	return value.map((day, i) => {
+		if (i === 0) return day;
+		// the settings site sends null for days off (and getWorkingStatus treats anything else that isn't
+		// a [start, end] pair as a day off), so null and [] are kept as days off
+		if (day === null || (Array.isArray(day) && day.length === 0)) return null;
 		if (!Array.isArray(day) || day.length !== 2 || !day.every(t => typeof t === 'string' && time.test(t))) {
-			throw new ValidationError(`${field}[${i}]`, 'expected ["HH:MM", "HH:MM"]');
+			throw new ValidationError(`${field}[${i}]`, 'expected ["HH:MM", "HH:MM"] or null for a day off');
 		}
-	}
-	return value;
+		return day;
+	});
 };
 
 const holidays = (value, field) => {
