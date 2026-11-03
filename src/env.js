@@ -40,6 +40,9 @@ const env = {
 		new Error('is required'),
 	HTTP_TRUST_PROXY: () => true, // optional
 	INVALIDATE_TOKENS: () => true, // optional
+	METRICS_TOKEN: v =>
+		!v || v.length >= 16 ||
+		new Error('must be at least 16 characters long (or unset to disable /metrics)'),
 	OVERRIDE_ARCHIVE: () => true, // optional
 	PUBLIC_BOT: () => true, // optional
 	PUBLISH_COMMANDS: () => true, // optional

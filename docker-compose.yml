@@ -51,6 +51,7 @@ services:
       HTTP_PORT: 8169
       HTTP_TRUST_PROXY: "false" # set to true if you're using a reverse proxy
       INVALIDATE_TOKENS:
+      METRICS_TOKEN: null # set to a long random string to enable /metrics for Prometheus
       OVERRIDE_ARCHIVE: null
       PUBLIC_BOT: "false"
       PUBLISH_COMMANDS: "false"
