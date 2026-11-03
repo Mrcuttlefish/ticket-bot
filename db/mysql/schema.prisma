@@ -72,7 +72,7 @@ model Category {
     channelName     String
     claiming        Boolean    @default(false)
     createdAt       DateTime   @default(now())
-    cooldown        Int?
+    cooldown        Int? // seconds
     customTopic     String?
     description     String
     discordCategory String     @db.VarChar(19)
@@ -112,7 +112,7 @@ model Feedback {
 }
 
 model Guild {
-    autoClose     Int        @default(43200000)
+    autoClose     Int        @default(43200) // seconds
     autoTag       Json       @default("[]")
     archive       Boolean    @default(true)
     blocklist     Json       @default("[]")
@@ -127,7 +127,7 @@ model Guild {
     locale        String     @default("en-GB")
     logChannel    String?    @db.VarChar(19)
     primaryColour String     @default("#009999")
-    staleAfter    Int?
+    staleAfter    Int? // seconds
     successColour String     @default("Green")
     tags          Tag[]
     tickets       Ticket[]

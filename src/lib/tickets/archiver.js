@@ -39,10 +39,40 @@ module.exports = class TicketArchiver {
 		try {
 			const queries = [];
 
-			members.add(message.member);
+			// the author may not be a member (e.g. webhooks, or users who have left the server)
+			if (message.member) members.add(message.member);
 
 			for (const member of members) {
 				roles.add(hoistedRole(member));
+			}
+
+			// archived users reference archived roles, so this has to run after the role queries below
+			const authorQueries = [];
+			if (!message.member && message.author) {
+				const everyone = message.guild.roles.everyone;
+				roles.add(everyone);
+				authorQueries.push(
+					this.client.prisma.archivedUser.upsert({
+						create: {
+							avatar: message.author.avatar,
+							bot: message.author.bot,
+							discriminator: message.author.discriminator,
+							displayName: await crypto.queue(w => w.encrypt(message.author.displayName ?? message.author.username)),
+							roleId: everyone.id,
+							ticketId,
+							userId: message.author.id,
+							username: await crypto.queue(w => w.encrypt(message.author.username)),
+						},
+						select: { ticketId: true },
+						update: {},
+						where: {
+							ticketId_userId: {
+								ticketId,
+								userId: message.author.id,
+							},
+						},
+					}),
+				);
 			}
 
 			for (const role of roles) {
@@ -147,8 +177,15 @@ module.exports = class TicketArchiver {
 				}),
 			);
 
+			queries.splice(roles.size, 0, ...authorQueries); // after the roles, before the message
 			return await this.client.prisma.$transaction(queries);
 		} catch (error) {
+			if (error?.code === 'P2003') {
+				// foreign key failure: the ticket no longer exists (e.g. the guild's data was reset or imported
+				// while the channel was still open), so there is nothing to archive the message into (upstream #453)
+				this.client.log.verbose('Not archiving message %s because ticket %s no longer exists', message.id, ticketId);
+				return false;
+			}
 			this.client.log.error('Failed to archive message %s', message.id);
 			this.client.log.error(error);
 			return false;

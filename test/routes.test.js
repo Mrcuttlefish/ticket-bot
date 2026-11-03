@@ -129,3 +129,73 @@ test('POST panel rejects a channel from another server', async () => {
 	assert.equal(res.status, 400);
 	assert.match(sent.message, /text channel in this server/);
 });
+
+test('DELETE an unsaved question succeeds without touching the database (upstream #465)', async () => {
+	const route = require('../src/routes/api/admin/guilds/[guild]/categories/[category]/questions/[question].js').delete(fastify);
+	let deleted = false;
+	const client = {
+		prisma: {
+			category: {
+				findUnique: async () => ({
+					guildId: GUILD,
+					id: 1,
+				}),
+			},
+			question: {
+				delete: async () => {
+					deleted = true;
+				},
+				findUnique: async () => null,
+			},
+		},
+	};
+	const result = await route.handler({
+		params: {
+			category: '1',
+			guild: GUILD,
+			question: 'new-uuid',
+		},
+		routeOptions: { config: { client } },
+		user: { id: USER },
+	}, {});
+	assert.deepEqual(result, { id: 'new-uuid' });
+	assert.equal(deleted, false);
+});
+
+test('DELETE a question from another category is refused', async () => {
+	const route = require('../src/routes/api/admin/guilds/[guild]/categories/[category]/questions/[question].js').delete(fastify);
+	const client = {
+		prisma: {
+			category: {
+				findUnique: async () => ({
+					guildId: GUILD,
+					id: 1,
+				}),
+			},
+			question: {
+				findUnique: async () => ({
+					categoryId: 2,
+					id: 'q',
+				}),
+			},
+		},
+	};
+	let status;
+	const res = {
+		send: () => res,
+		status(s) {
+			status = s;
+			return res;
+		},
+	};
+	await route.handler({
+		params: {
+			category: '1',
+			guild: GUILD,
+			question: 'q',
+		},
+		routeOptions: { config: { client } },
+		user: { id: USER },
+	}, res);
+	assert.equal(status, 400);
+});
