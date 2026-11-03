@@ -3,6 +3,10 @@ const {
 	ApplicationCommandOptionType, MessageFlags,
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('../../lib/embed');
+const { fillTagPlaceholders } = require('../../lib/tags');
+const { pools } = require('../../lib/threads');
+
+const { crypto } = pools;
 
 module.exports = class TagSlashCommand extends SlashCommand {
 	constructor(client, options) {
@@ -44,10 +48,37 @@ module.exports = class TagSlashCommand extends SlashCommand {
 
 		const user = interaction.options.getUser('for', false);
 		await interaction.deferReply({ flags: user ? 0 : MessageFlags.Ephemeral });
-		const tag = await client.prisma.tag.findUnique({
+		// tags from other servers must not be readable by ID
+		const tag = await client.prisma.tag.findFirst({
 			include: { guild: true },
-			where: { id: interaction.options.getInteger('tag', true) },
+			where: {
+				guildId: interaction.guild.id,
+				id: interaction.options.getInteger('tag', true),
+			},
 		});
+
+		if (!tag) {
+			const settings = await client.prisma.guild.findUnique({ where: { id: interaction.guild.id } });
+			const getMessage = client.i18n.getLocale(settings?.locale);
+			return await interaction.editReply({
+				embeds: [
+					new ExtendedEmbedBuilder()
+						.setColor(settings?.errorColour ?? 'Red')
+						.setTitle(getMessage('misc.error.title'))
+						.setDescription(getMessage('misc.error.description')),
+				],
+			});
+		}
+
+		const ticket = await client.prisma.ticket.findUnique({
+			select: {
+				createdById: true,
+				number: true,
+				topic: true,
+			},
+			where: { id: interaction.channel.id },
+		});
+		if (ticket?.topic) ticket.topic = await crypto.queue(w => w.decrypt(ticket.topic));
 
 		await interaction.editReply({
 			allowedMentions: { users: user ? [user.id]: [] },
@@ -55,7 +86,13 @@ module.exports = class TagSlashCommand extends SlashCommand {
 			embeds: [
 				new ExtendedEmbedBuilder()
 					.setColor(tag.guild.primaryColour)
-					.setDescription(tag.content),
+					.setDescription(fillTagPlaceholders(tag.content, {
+						author: interaction.user,
+						channel: interaction.channel,
+						guild: interaction.guild,
+						ticket,
+						user: user ?? interaction.user,
+					})),
 			],
 		});
 	}

@@ -199,3 +199,111 @@ test('DELETE a question from another category is refused', async () => {
 	}, res);
 	assert.equal(status, 400);
 });
+
+function panelClient(categories) {
+	const sent = [];
+	const channel = {
+		id: '900000000000000009',
+		isTextBased: () => true,
+		messages: { fetch: async () => null },
+		send: async payload => sent.push(payload),
+		toString: () => '<#900000000000000009>',
+		type: ChannelType.GuildText,
+	};
+	const {
+		client, guild,
+	} = fakeClient({ channels: [channel] });
+	guild.iconURL = () => null;
+	client.prisma.guild.findUnique = async () => ({
+		categories,
+		locale: 'en-GB',
+		primaryColour: '#009999',
+	});
+	client.i18n = { getLocale: () => key => (key.endsWith('emoji') ? '🎫' : 'Create a ticket') };
+	client.user = { id: '1' };
+	return {
+		client,
+		sent,
+	};
+}
+
+const panelRes = {
+	code() {
+		return this;
+	},
+	send(body) {
+		this.body = body;
+		return this;
+	},
+};
+
+test('single-category button panels use the category name and emoji (upstream #450, #616)', async () => {
+	const route = require('../src/routes/api/admin/guilds/[guild]/panels.js').post(fastify);
+	const {
+		client, sent,
+	} = panelClient([{
+		emoji: 'bug',
+		id: 1,
+		name: 'Bug reports',
+	}]);
+	await route.handler({
+		body: {
+			categories: [1],
+			channel: '900000000000000009',
+			type: 'BUTTON',
+		},
+		params: { guild: GUILD },
+		routeOptions: { config: { client } },
+		user: { id: USER },
+	}, panelRes).catch(() => {}); // logAdminEvent needs more of the client than the fake provides
+	const button = sent[0].components[0].components[0].data;
+	assert.equal(button.label, 'Bug reports');
+	assert.equal(button.emoji.name, '🐛');
+});
+
+test('single-category menu panels keep the generic button', async () => {
+	const route = require('../src/routes/api/admin/guilds/[guild]/panels.js').post(fastify);
+	const {
+		client, sent,
+	} = panelClient([{
+		emoji: 'bug',
+		id: 1,
+		name: 'Bug reports',
+	}]);
+	await route.handler({
+		body: {
+			categories: [1],
+			channel: '900000000000000009',
+			type: 'MENU',
+		},
+		params: { guild: GUILD },
+		routeOptions: { config: { client } },
+		user: { id: USER },
+	}, panelRes).catch(() => {});
+	assert.equal(sent[0].components[0].components[0].data.label, 'Create a ticket');
+});
+
+test('editing a panel requires a bot message in that channel (upstream #362)', async () => {
+	const route = require('../src/routes/api/admin/guilds/[guild]/panels.js').post(fastify);
+	const {
+		client, sent,
+	} = panelClient([{
+		emoji: 'bug',
+		id: 1,
+		name: 'Bug reports',
+	}]);
+	const res = { ...panelRes };
+	await route.handler({
+		body: {
+			categories: [1],
+			channel: '900000000000000009',
+			message: '123',
+			type: 'BUTTON',
+		},
+		params: { guild: GUILD },
+		routeOptions: { config: { client } },
+		user: { id: USER },
+	}, res);
+	assert.match(res.body.message, /panel sent by the bot/);
+	assert.equal(sent.length, 0);
+});
