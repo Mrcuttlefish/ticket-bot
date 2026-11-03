@@ -1,3 +1,6 @@
+const {
+	getJWTSecret, isTokenCurrent,
+} = require('./lib/jwt-secret');
 const fastify = require('fastify')({ trustProxy: process.env.HTTP_TRUST_PROXY === 'true' });
 const { short } = require('leeks.js');
 const { join } = require('path');
@@ -20,7 +23,8 @@ module.exports = async client => {
 			cookieName: 'token',
 			signed: false,
 		},
-		secret: process.env.ENCRYPTION_KEY,
+		// a key derived from ENCRYPTION_KEY, not the key itself (S10)
+		secret: getJWTSecret(process.env.ENCRYPTION_KEY),
 	});
 
 	// Activate Sentry if SENTRY_DNS is set
@@ -33,8 +37,7 @@ module.exports = async client => {
 	fastify.decorate('authenticate', async (req, res) => {
 		try {
 			const data = await req.jwtVerify();
-			if (data.expiresAt < Date.now()) throw 'expired';
-			if (data.createdAt < new Date(process.env.INVALIDATE_TOKENS).getTime()) throw 'expired';
+			if (!isTokenCurrent(data, process.env.INVALIDATE_TOKENS)) throw 'expired';
 		} catch (error) {
 			return res.code(401).send({
 				error: 'Unauthorised',
