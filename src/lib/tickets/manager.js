@@ -906,7 +906,8 @@ module.exports = class TicketManager {
 		await Promise.all([
 			interaction.channel.permissionOverwrites.edit(interaction.user, { 'ViewChannel': true }, { reason }),
 			// the previous claimer (when taking over) loses their claim, and the access that came with it
-			previous && interaction.channel.permissionOverwrites.delete(previous, reason).catch(() => null),
+			// (unless they opened the ticket, e.g. a staff member's own ticket)
+			previous && previous !== ticket.createdById && interaction.channel.permissionOverwrites.delete(previous, reason).catch(() => null),
 			// by default, a claimed ticket is hidden from the rest of the staff
 			...(ticket.category.claimHide ? ticket.category.staffRoles : []).map(role => interaction.channel.permissionOverwrites.edit(role, { 'ViewChannel': false }, { reason })),
 			this.client.prisma.ticket.update({
@@ -1038,8 +1039,9 @@ module.exports = class TicketManager {
 
 		const reason = `Ticket released by ${interaction.user.tag}`;
 		await Promise.all([
-			// remove the claimer's access (it used to remove the access of whoever released it, even if they weren't the claimer)
-			interaction.channel.permissionOverwrites.delete(claimer ?? interaction.user, reason).catch(() => null),
+			// remove the claimer's access (it used to remove the access of whoever released it, even if they weren't the
+			// claimer), but never the creator's, who may be staff and have claimed their own ticket
+			claimer && claimer !== ticket.createdById && interaction.channel.permissionOverwrites.delete(claimer, reason).catch(() => null),
 			...ticket.category.staffRoles.map(role => interaction.channel.permissionOverwrites.edit(role, { 'ViewChannel': true }, { reason })),
 			this.client.prisma.ticket.update({
 				data: { claimedBy: { disconnect: true } },
@@ -1509,7 +1511,13 @@ module.exports = class TicketManager {
 					embeds: [embed],
 				});
 			} catch (error) {
-				this.client.log.error(`Failed to lock the channel of closed ticket ${ticket.id}`, error);
+				// never leave the creator with access to a closed ticket: if it can't be locked, delete it as before
+				this.client.log.error(`Failed to lock the channel of closed ticket ${ticket.id}; deleting it instead`, error);
+				await this.client.prisma.ticket.update({
+					data: { channelDeleteAt: null },
+					where: { id: ticket.id },
+				}).catch(e => this.client.log.error(e));
+				if (channel.deletable) await channel.delete(auditReason).catch(e => this.client.log.error(e));
 			}
 		} else if (channel?.deletable) {
 			await channel.delete(auditReason);
@@ -1620,11 +1628,22 @@ module.exports = class TicketManager {
 		try {
 			const creator = guild.members.cache.get(ticket.createdById);
 			if (creator) {
-				await creator.send({
+				const dm = {
 					components,
 					embeds: [dmEmbed],
-					files: transcriptFile && targets.dm ? [transcriptFile] : [],
-				});
+				};
+				if (transcriptFile && targets.dm) {
+					// a transcript can be too big to attach; the DM is still sent without it
+					await creator.send({
+						...dm,
+						files: [transcriptFile],
+					}).catch(async error => {
+						this.client.log.warn(`Failed to send the transcript of ticket ${ticket.id} by DM`, error);
+						await creator.send(dm);
+					});
+				} else {
+					await creator.send(dm);
+				}
 			}
 		} catch (error) {
 			this.client.log.error(error);

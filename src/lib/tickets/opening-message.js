@@ -22,6 +22,7 @@ const {
 	SeparatorBuilder,
 	TextDisplayBuilder,
 	ThumbnailBuilder,
+	escapeMarkdown,
 	resolveColor,
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('../embed');
@@ -143,7 +144,7 @@ function buildOpeningMessage({
 }) {
 	if (style === 'TEXT' || style === 'OFF') {
 		const head = style === 'TEXT'
-			? [content, `**${author.name}**`, description, image].filter(Boolean).join('\n\n')
+			? [content, `**${escapeMarkdown(author.name).replace(/[[\]]/g, '\\$&')}**`, description, image].filter(Boolean).join('\n\n')
 			: content;
 		return {
 			// the text can include things members wrote (the topic and answers, or placeholders in the opening message),
@@ -237,8 +238,11 @@ function getAllowedMentions(text) {
  * @returns {string}
  */
 function buildText(head, fields) {
-	const details = fields.length ? truncate(fields.map(field => `**${field.name}**\n${field.value}`).join('\n\n'), LIMITS.details) : '';
-	return truncate(head, TEXT_LIMIT - DETAILS_MARK.length - details.length) + DETAILS_MARK + details;
+	// members' text (the topic, answers, or placeholders in the head) can't add a second marker, which would make
+	// later edits replace the wrong part of the message
+	const clean = text => String(text ?? '').replaceAll('\u200b', '');
+	const details = fields.length ? truncate(fields.map(field => `**${clean(field.name)}**\n${clean(field.value)}`).join('\n\n'), LIMITS.details) : '';
+	return truncate(clean(head), TEXT_LIMIT - DETAILS_MARK.length - details.length) + DETAILS_MARK + details;
 }
 
 /**
