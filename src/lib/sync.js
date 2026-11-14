@@ -1,4 +1,17 @@
 /**
+ * Whether a channel (or thread) no longer exists. Other errors (e.g. a network problem) don't count.
+ * @param {import('client')} client
+ * @param {string} id
+ */
+async function isGone(client, id) {
+	try {
+		return !(await client.channels.fetch(id));
+	} catch (error) {
+		return error?.code === 10003; // Unknown Channel
+	}
+}
+
+/**
  * @param {import("client")} client
  */
 module.exports = async client => {
@@ -41,7 +54,8 @@ module.exports = async client => {
 			}
 			/** @type {import("discord.js").Guild} */
 			const guild = client.guilds.cache.get(ticket.guildId);
-			if (guild && guild.available && !client.channels.cache.has(ticket.id)) {
+			// archived threads (thread tickets) aren't cached, so only close tickets whose channel Discord says is gone
+			if (guild && guild.available && !client.channels.cache.has(ticket.id) && await isGone(client, ticket.id)) {
 				deleted += 0;
 				try {
 					await client.tickets.finallyClose(ticket.id, { reason: 'channel deleted' });

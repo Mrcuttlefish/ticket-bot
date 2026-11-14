@@ -2,6 +2,7 @@ const { SlashCommand } = require('@eartharoid/dbf');
 const {
 	ApplicationCommandOptionType, MessageFlags, OverwriteType,
 } = require('discord.js');
+const { isThreadTicket } = require('../../lib/tickets/access');
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { isStaff } = require('../../lib/users');
 const { getEmoji } = require('./priority');
@@ -109,6 +110,20 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 						.setColor(ticket.guild.errorColour)
 						.setTitle(getMessage('misc.unknown_category.title'))
 						.setDescription(getMessage('misc.unknown_category.description')),
+				],
+			});
+		}
+		// thread tickets can't become channels (or the other way round), or move to another channel
+		if (isThreadTicket(interaction.channel) || newCategory.channelType === 'THREAD') {
+			return await interaction.editReply({
+				embeds: [
+					new ExtendedEmbedBuilder({
+						iconURL: interaction.guild.iconURL(),
+						text: ticket.guild.footer,
+					})
+						.setColor(ticket.guild.errorColour)
+						.setTitle(getMessage('commands.slash.move.thread.title'))
+						.setDescription(getMessage('commands.slash.move.thread.description')),
 				],
 			});
 		}

@@ -158,6 +158,9 @@ commands:
         reason:
           description: Why the ticket is being moved
           name: reason
+      thread:
+        description: Thread tickets can't be moved, and tickets can't be moved into a category that uses threads.
+        title: ❌ Can't move this ticket
     new:
       description: Create a new ticket
       name: new

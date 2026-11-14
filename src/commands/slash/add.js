@@ -2,6 +2,7 @@ const { SlashCommand } = require('@eartharoid/dbf');
 const {
 	ApplicationCommandOptionType, MessageFlags,
 } = require('discord.js');
+const { grantAccess } = require('../../lib/tickets/access');
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { isStaff } = require('../../lib/users');
 const { logTicketEvent } = require('../../lib/logging');
@@ -89,20 +90,10 @@ module.exports = class AddSlashCommand extends SlashCommand {
 		}
 
 		/** @type {import("discord.js").TextChannel} */
-		const ticketChannel = await interaction.guild.channels.fetch(ticket.id);
+		const ticketChannel = client.channels.cache.get(ticket.id) ?? await interaction.guild.channels.fetch(ticket.id);
 		const member = interaction.options.getMember('member', true);
 
-		await ticketChannel.permissionOverwrites.edit(
-			member,
-			{
-				AttachFiles: true,
-				EmbedLinks: true,
-				ReadMessageHistory: true,
-				SendMessages: true,
-				ViewChannel: true,
-			},
-			`${interaction.user.tag} added ${member.user.tag} to the ticket`,
-		);
+		await grantAccess(ticketChannel, member, `${interaction.user.tag} added ${member.user.tag} to the ticket`);
 
 		await ticketChannel.send({
 			embeds: [

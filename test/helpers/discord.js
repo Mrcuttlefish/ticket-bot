@@ -242,6 +242,25 @@ function makeTextChannel(guild, {
 				thread.type = options.type;
 				thread.parentId = channel.id;
 				thread.options = options;
+				// like a ThreadChannel: members are added and removed, and it can be locked and archived
+				thread.isThread = () => true;
+				thread.locked = false;
+				thread.archived = false;
+				thread.members = {
+					add: async id => {
+						thread.members.cache.set(id, { id });
+						return id;
+					},
+					cache: new Collection(),
+					fetch: async () => thread.members.cache,
+					remove: async id => {
+						thread.members.cache.delete(id);
+						return id;
+					},
+				};
+				thread.setLocked = async (value = true) => (thread.locked = value);
+				thread.setArchived = async (value = true) => (thread.archived = value);
+				thread.setRateLimitPerUser = async value => (thread.rateLimitPerUser = value);
 				channel.threads.created.push(thread);
 				return thread;
 			},

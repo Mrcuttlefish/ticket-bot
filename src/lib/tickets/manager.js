@@ -15,6 +15,11 @@ const {
 } = require('discord.js');
 const ms = require('ms');
 const ExtendedEmbedBuilder = require('../embed');
+const {
+	createThreadTicket,
+	getThreadParent,
+	isThreadTicket,
+} = require('./access');
 const { logTicketEvent } = require('../logging');
 const { increment } = require('../metrics');
 const { sendTicketWebhook } = require('./webhook-events');
@@ -487,16 +492,26 @@ module.exports = class TicketManager {
 
 		const creator = await guild.members.fetch(interaction.user.id);
 		const number = await this.getNextNumber(category.guild.id, category.guild.ticketNumberOffset);
-		const parent = this.pickDiscordCategory(guild, category);
-		if (!parent) throw new Error(`Every Discord category for category ${category.id} is full`);
 		const channelName = formatChannelName(category.channelName, {
 			displayName: creator.displayName,
 			number,
 			username: creator.user.username,
 		});
 		const allow = ['ViewChannel', 'ReadMessageHistory', 'SendMessages', 'EmbedLinks', 'AttachFiles'];
-		/** @type {import("discord.js").TextChannel} */
-		const channel = await guild.channels.create({
+		const threadParent = getThreadParent(guild, category);
+		if (category.channelType === 'THREAD' && !threadParent) {
+			throw new Error(`The thread channel for category ${category.id} is missing or isn't a text channel`);
+		}
+		const parent = threadParent ? null : this.pickDiscordCategory(guild, category);
+		if (!threadParent && !parent) throw new Error(`Every Discord category for category ${category.id} is full`);
+		/** @type {import("discord.js").TextChannel | import("discord.js").ThreadChannel} */
+		const channel = threadParent ? await createThreadTicket({
+			category,
+			creator,
+			name: channelName,
+			parent: threadParent,
+			reason: `${creator.user.tag} created a ticket`,
+		}) : await guild.channels.create({
 			name: channelName,
 			parent,
 			permissionOverwrites: [
@@ -895,7 +910,8 @@ module.exports = class TicketManager {
 				}).catch(() => this.client.log.verbose(`Couldn't send the opening DM for ticket ${ticket.id}`));
 			}
 		}
-		if (category.staffThread) await createStaffThread(channel, category, ticket.number, getMessage);
+		// threads can't have threads of their own
+		if (category.staffThread && !isThreadTicket(channel)) await createStaffThread(channel, category, ticket.number, getMessage);
 	}
 
 	/**
@@ -1009,13 +1025,18 @@ module.exports = class TicketManager {
 		await interaction.deferReply();
 
 		const reason = `Ticket claimed by ${interaction.user.tag}`;
+		// thread tickets have no permissions of their own: the claimer is added to the thread, and the rest of the
+		// staff can't be hidden from it
+		const thread = isThreadTicket(interaction.channel);
 		await Promise.all([
-			interaction.channel.permissionOverwrites.edit(interaction.user, { 'ViewChannel': true }, { reason }),
+			thread
+				? interaction.channel.members.add(interaction.user.id)
+				: interaction.channel.permissionOverwrites.edit(interaction.user, { 'ViewChannel': true }, { reason }),
 			// the previous claimer (when taking over) loses their claim, and the access that came with it
 			// (unless they opened the ticket, e.g. a staff member's own ticket)
-			previous && previous !== ticket.createdById && interaction.channel.permissionOverwrites.delete(previous, reason).catch(() => null),
+			!thread && previous && previous !== ticket.createdById && interaction.channel.permissionOverwrites.delete(previous, reason).catch(() => null),
 			// by default, a claimed ticket is hidden from the rest of the staff
-			...(ticket.category.claimHide ? ticket.category.staffRoles : []).map(role => interaction.channel.permissionOverwrites.edit(role, { 'ViewChannel': false }, { reason })),
+			...(ticket.category.claimHide && !thread ? ticket.category.staffRoles : []).map(role => interaction.channel.permissionOverwrites.edit(role, { 'ViewChannel': false }, { reason })),
 			this.client.prisma.ticket.update({
 				data: {
 					claimedBy: {
@@ -1081,7 +1102,8 @@ module.exports = class TicketManager {
 				const name = await this.ticketChannelName(claimer ? category.claimedChannelName : category.channelName, ticket, channel.guild, claimer);
 				if (name && name !== channel.name) await channel.setName(name, reason);
 			}
-			if (category.claimedCategory) {
+			// threads stay in their channel
+			if (category.claimedCategory && !isThreadTicket(channel)) {
 				let parent = null;
 				if (claimer) {
 					const target = channel.guild.channels.cache.get(category.claimedCategory); // only categories in this server
@@ -1148,11 +1170,13 @@ module.exports = class TicketManager {
 		await interaction.deferReply();
 
 		const reason = `Ticket released by ${interaction.user.tag}`;
+		// in thread tickets the claimer stays in the thread (like other staff), and there's nothing to unhide
+		const thread = isThreadTicket(interaction.channel);
 		await Promise.all([
 			// remove the claimer's access (it used to remove the access of whoever released it, even if they weren't the
 			// claimer), but never the creator's, who may be staff and have claimed their own ticket
-			claimer && claimer !== ticket.createdById && interaction.channel.permissionOverwrites.delete(claimer, reason).catch(() => null),
-			...ticket.category.staffRoles.map(role => interaction.channel.permissionOverwrites.edit(role, { 'ViewChannel': true }, { reason })),
+			!thread && claimer && claimer !== ticket.createdById && interaction.channel.permissionOverwrites.delete(claimer, reason).catch(() => null),
+			...(thread ? [] : ticket.category.staffRoles).map(role => interaction.channel.permissionOverwrites.edit(role, { 'ViewChannel': true }, { reason })),
 			this.client.prisma.ticket.update({
 				data: { claimedBy: { disconnect: true } },
 				where: { id: interaction.channel.id },

@@ -83,7 +83,8 @@ async function runAutomations(client, now = Date.now()) {
 		const due = getDueRules(rules.get(ticket.categoryId), ticket, now);
 		if (!due.length) continue;
 		try {
-			const channel = client.channels.cache.get(ticket.id);
+			// archived thread tickets aren't cached
+			const channel = client.channels.cache.get(ticket.id) ?? await client.channels.fetch(ticket.id).catch(() => null);
 			if (!channel) continue;
 			let closed = false;
 			for (const rule of due) {

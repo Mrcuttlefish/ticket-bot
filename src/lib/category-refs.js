@@ -1,4 +1,8 @@
-const { ChannelType: { GuildCategory } } = require('discord.js');
+const {
+	ChannelType: {
+		GuildCategory, GuildText,
+	},
+} = require('discord.js');
 const { ValidationError } = require('./validation');
 
 /**
@@ -33,6 +37,16 @@ function checkCategoryRefs(guild, data, getChannel) {
 	};
 	if (data.discordCategory) checkChannel(data.discordCategory, 'discordCategory');
 	if (data.claimedCategory) checkChannel(data.claimedCategory, 'claimedCategory');
+	// thread tickets go in a text channel in this server (Ticket Tool parity, P3)
+	if (data.threadParent) {
+		const channel = getChannel(data.threadParent);
+		if (!channel || channel.guildId !== guild.id || channel.type !== GuildText) {
+			throw new ValidationError('threadParent', 'must be a text channel in this server');
+		}
+	}
+	if (data.channelType === 'THREAD' && data.threadParent === null) {
+		throw new ValidationError('threadParent', 'choose the channel that thread tickets are created in');
+	}
 	if (data.fallbackCategories) {
 		if (data.fallbackCategories.length > 25) throw new ValidationError('fallbackCategories', 'must have at most 25 categories');
 		data.fallbackCategories.forEach((id, i) => checkChannel(id, `fallbackCategories[${i}]`));
