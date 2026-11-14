@@ -1,0 +1,34 @@
+name: Dashboard smoke test
+
+# Builds the Docker image, runs it against a fake Discord (scripts/smoke/fake-discord.js) and
+# loads every dashboard page in headless Chromium with the headers and CSP the bot sends.
+# Fails on any page error, console error, CSP report, failed request or a page stuck on
+# its loading spinner.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: built image serves a working dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # the fake Discord uses the ws package from the repo's dependencies
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: docker build -t ticket-bot:smoke .
+      - name: Install Playwright and Chromium
+        run: |
+          npm install -g playwright@1.63.0
+          npx -y playwright@1.63.0 install --with-deps chromium
+      - name: Run the image and load the dashboard
+        run: NODE_PATH="$(npm root -g)" scripts/smoke/run.sh ticket-bot:smoke

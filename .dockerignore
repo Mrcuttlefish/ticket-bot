@@ -10,3 +10,6 @@
 !.npmrc
 !package.json
 !bun.lock
+
+# the CI smoke test for the dashboard is not needed in the image
+scripts/smoke
