@@ -2,15 +2,17 @@
  * The archive portal API (upstream #337): ticket lists, transcripts, replies and closing from the web.
  * Routes are in src/routes/api/guilds/[guild]/tickets. The agreed response shapes are in the PR description.
  *
- * Who can see what:
- * - staff (see users.js `isStaff`) can see every ticket in the guild
+ * Who can see what (the same people who can see the ticket in Discord or get its transcript with /transcript):
+ * - server managers (Manage Server) and bot operators can see every ticket in the guild
+ * - staff can see tickets in the categories they're staff for, except open tickets that someone else claimed in a
+ *   category that hides claimed tickets
  * - anyone else can only see tickets they created
  * - in anonymous categories (anonymous.js), staff authors are shown as a fixed "Staff" author to everyone, staff
  *   included; the real author is only in the database (and the bot's log files)
  */
 
 const { EventEmitter } = require('node:events');
-const { isStaff } = require('../users');
+const { PermissionsBitField } = require('discord.js');
 const { pools } = require('../threads');
 
 const { crypto } = pools;
@@ -44,16 +46,83 @@ function getPortalEvents(client) {
 }
 
 /**
+ * @typedef {object} Viewer
+ * @property {import('discord.js').Guild} guild
+ * @property {string} userId
+ * @property {boolean} admin can see every ticket in the guild
+ * @property {number[]} staffCategories the categories the viewer is staff for (empty for admins, who are staff for all)
+ * @property {boolean} staff whether the viewer is staff for any category
+ */
+
+/**
  * @param {import('client')} client
  * @param {string} guildId
  * @param {string} userId
- * @returns {Promise<{ guild: import('discord.js').Guild, staff: boolean }>}
+ * @returns {Promise<Viewer>}
  */
 async function getViewer(client, guildId, userId) {
 	const guild = client.guilds.cache.get(guildId);
+	const member = guild.members.cache.get(userId) ?? await guild.members.fetch(userId).catch(() => null);
+	const admin = client.supers.includes(userId) ||
+		Boolean(member?.permissions.has(PermissionsBitField.Flags.ManageGuild));
+	let staffCategories = [];
+	if (member && !admin) {
+		const categories = await client.prisma.category.findMany({
+			select: {
+				id: true,
+				staffRoles: true,
+			},
+			where: { guildId: guild.id },
+		});
+		staffCategories = categories
+			.filter(category => (category.staffRoles ?? []).some(role => member.roles.cache.has(role)))
+			.map(category => category.id);
+	}
 	return {
+		admin,
 		guild,
-		staff: await isStaff(guild, userId),
+		staff: admin || staffCategories.length > 0,
+		staffCategories,
+		userId,
+	};
+}
+
+/**
+ * Whether the viewer is staff for this ticket: what Discord shows them, not just whether they're staff somewhere.
+ * @param {Viewer} viewer
+ * @param {object} ticket a ticket row with `category`
+ * @returns {boolean}
+ */
+function isTicketStaff(viewer, ticket) {
+	if (viewer.admin) return true;
+	if (!viewer.staffCategories.includes(ticket.categoryId)) return false;
+	// claimed tickets are hidden from the rest of the staff in Discord while they're open
+	if (ticket.open && ticket.category?.claimHide && ticket.claimedById && ticket.claimedById !== viewer.userId) return false;
+	return true;
+}
+
+/**
+ * A Prisma `where` for the tickets the viewer may see (combine it with the guild's ID).
+ * @param {Viewer} viewer
+ * @returns {object}
+ */
+function viewableWhere(viewer) {
+	if (viewer.admin) return {};
+	return {
+		OR: [
+			{ createdById: viewer.userId },
+			{
+				categoryId: { in: viewer.staffCategories },
+				NOT: {
+					AND: [
+						{ open: true },
+						{ category: { claimHide: true } },
+						{ claimedById: { not: null } },
+						{ claimedById: { not: viewer.userId } },
+					],
+				},
+			},
+		],
 	};
 }
 
@@ -63,14 +132,13 @@ async function getViewer(client, guildId, userId) {
  * @param {import('fastify').FastifyRequest} req
  * @param {import('fastify').FastifyReply} res
  * @param {object} [include] Prisma `include`
- * @returns {Promise<{ ticket: object, guild: import('discord.js').Guild, staff: boolean } | null>}
+ * @returns {Promise<{ ticket: object, guild: import('discord.js').Guild, staff: boolean } | null>} `staff`: for this ticket
  */
 async function findViewableTicket(req, res, include = {}) {
 	/** @type {import('client')} */
 	const client = req.routeOptions.config.client;
-	const {
-		guild, staff,
-	} = await getViewer(client, req.params.guild, req.user.id);
+	const viewer = await getViewer(client, req.params.guild, req.user.id);
+	const { guild } = viewer;
 	const ticket = /^\d{17,20}$/.test(req.params.ticket)
 		? await client.prisma.ticket.findFirst({
 			include: {
@@ -83,6 +151,7 @@ async function findViewableTicket(req, res, include = {}) {
 			},
 		})
 		: null;
+	const staff = Boolean(ticket) && isTicketStaff(viewer, ticket);
 	if (!ticket || !canView(ticket, req.user.id, staff)) {
 		res.code(404).send({
 			error: 'Not Found',
@@ -350,8 +419,10 @@ module.exports = {
 	getUsers,
 	getViewer,
 	isExpired,
+	isTicketStaff,
 	refreshAttachments,
 	serializeCategory,
 	serializeMessages,
 	serializeTicket,
+	viewableWhere,
 };

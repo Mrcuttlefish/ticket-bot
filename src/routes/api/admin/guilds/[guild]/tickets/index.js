@@ -1,4 +1,5 @@
 const { pools } = require('../../../../../../lib/threads');
+const { anonymiseTicketRow } = require('../../../../../../lib/tickets/anonymous');
 const { crypto } = pools;
 
 module.exports.get = fastify => ({
@@ -8,6 +9,7 @@ module.exports.get = fastify => ({
 		const { query } = req;
 		// TODO: advanced filters
 		const tickets = await client.prisma.ticket.findMany({
+			include: { category: { select: { anonymous: true } } },
 			orderBy: { createdAt: 'asc' },
 			where: {
 				createdAt: { gte: query.since && new Date((Number(query.since) * 1000) || query.since) },
@@ -18,7 +20,10 @@ module.exports.get = fastify => ({
 			tickets.map(async ticket => {
 				ticket.closedReason &&= await crypto.queue(w => w.decrypt(ticket.closedReason));
 				ticket.topic &&= await crypto.queue(w => w.decrypt(ticket.topic));
-				return ticket;
+				// admins don't see who handled anonymous tickets either
+				const anonymous = Boolean(ticket.category?.anonymous);
+				delete ticket.category;
+				return anonymiseTicketRow(ticket, anonymous);
 			}),
 		);
 	},
