@@ -208,8 +208,10 @@ test('anonymous categories: transcripts hide staff from everyone, staff included
 	const {
 		client, channel, creator, staff,
 	} = await openTicket({ anonymous: true });
-	await say(client, channel, creator, 'my order is late');
+	const fromCreator = await say(client, channel, creator, 'my order is late');
 	const fromStaff = await say(client, channel, staff, 'looking into it');
+	// both messages are archived in the background, in either order
+	await eventually(() => client.prisma.archivedMessage.findUnique({ where: { id: fromCreator.id } }));
 	await eventually(() => client.prisma.archivedMessage.findUnique({ where: { id: fromStaff.id } }));
 
 	const TranscriptCommand = require('../../src/commands/slash/transcript');
