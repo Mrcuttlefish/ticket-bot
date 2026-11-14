@@ -89,6 +89,19 @@ async function createThreadTicket({
 	return thread;
 }
 
+/**
+ * The members who can see a ticket. A channel's `members` is a collection of guild members, but a thread's is a
+ * manager of thread members (which can't be iterated).
+ * @param {import('discord.js').GuildTextBasedChannel} channel
+ * @returns {import('discord.js').GuildMember[]}
+ */
+function ticketMembers(channel) {
+	if (isThreadTicket(channel)) {
+		return [...(channel.members?.cache?.values() ?? [])].map(member => member.guildMember).filter(Boolean);
+	}
+	return [...(channel.members?.values() ?? [])];
+}
+
 module.exports = {
 	MEMBER_ALLOW,
 	createThreadTicket,
@@ -96,4 +109,5 @@ module.exports = {
 	grantAccess,
 	isThreadTicket,
 	revokeAccess,
+	ticketMembers,
 };

@@ -23,6 +23,7 @@ const { compileTagPattern } = require('../../lib/security');
 const {
 	fillTagPlaceholders, getGuildTags,
 } = require('../../lib/tags');
+const { ticketMembers } = require('../../lib/tickets/access');
 const emoji = require('node-emoji');
 const { buttonEmoji } = require('../../lib/icons');
 
@@ -199,7 +200,9 @@ module.exports = class extends Listener {
 			});
 			// channels of closed tickets can be kept (categories' keepClosedFor); messages sent after closing aren't
 			// archived and don't count as ticket activity
-			if (ticket && !ticket.open) ticket = null;
+			// a ticket's ID is its channel's ID; a row that belongs to another server (e.g. from an edited import file)
+			// must never collect this channel's messages
+			if (ticket && (!ticket.open || ticket.guildId !== message.guild.id)) ticket = null;
 
 			if (ticket) {
 				// archive messages (categories can override the archive setting, upstream #536)
@@ -227,10 +230,11 @@ module.exports = class extends Listener {
 
 					// set first and last message timestamps
 					const staff = await isStaff(message.guild, message.author.id);
+					// staff who open a ticket themselves are waiting for staff like any other creator
 					const data = {
 						lastMessageAt: new Date(),
 						// who should reply next, for automations (lib/automations.js)
-						waitingOn: staff ? 'CREATOR' : 'STAFF',
+						waitingOn: staff && message.author.id !== ticket.createdById ? 'CREATOR' : 'STAFF',
 					};
 					if (ticket.firstResponseAt === null && staff) data.firstResponseAt = new Date();
 
@@ -269,7 +273,7 @@ module.exports = class extends Listener {
 				) {
 					const key = `offline/${message.channel.id}`;
 					let online = 0;
-					for (const [, member] of message.channel.members) {
+					for (const member of ticketMembers(message.channel)) {
 						if (member.user.bot) continue;
 						if (!await isStaff(message.channel.guild, member.id)) continue;
 						if (member.presence && member.presence.status !== 'offline') online++;

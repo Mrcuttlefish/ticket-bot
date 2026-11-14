@@ -40,7 +40,7 @@ module.exports = class extends Listener {
 			},
 			where: { id: newMessage.channel.id },
 		});
-		if (!ticket) return;
+		if (!ticket || ticket.guildId !== newMessage.guild.id) return;
 
 		// the archive of a closed ticket is final: edits in a kept channel (e.g. staff notes written after closing,
 		// which were never archived) must not be added to it, or they'd show up in transcripts the creator can see

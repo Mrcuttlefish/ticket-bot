@@ -2,7 +2,6 @@ const { SlashCommand } = require('@eartharoid/dbf');
 const { ApplicationCommandOptionType } = require('discord.js');
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { logTicketEvent } = require('../../lib/logging');
-const { isStaff } = require('../../lib/users');
 
 const getEmoji = priority => {
 	const emojis = {
@@ -59,7 +58,14 @@ module.exports = class PrioritySlashCommand extends SlashCommand {
 		const settings = await client.prisma.guild.findUnique({ where: { id: interaction.guild.id } });
 		const getMessage = client.i18n.getLocale(settings.locale);
 		const ticket = await client.prisma.ticket.findUnique({
-			include: { category: { select: { channelName: true } } },
+			include: {
+				category: {
+					select: {
+						channelName: true,
+						staffRoles: true,
+					},
+				},
+			},
 			where: { id: interaction.channel.id },
 		});
 
@@ -79,14 +85,14 @@ module.exports = class PrioritySlashCommand extends SlashCommand {
 
 		if (!ticket.open) return await client.tickets.replyClosed(interaction, { guild: settings });
 
-		if (!(await isStaff(interaction.guild, interaction.user.id))) { // if user is not staff
+		if (!client.tickets.isCategoryStaff(interaction.member, ticket.category)) { // staff for this ticket's category
 			return await interaction.editReply({
 				embeds: [
 					new ExtendedEmbedBuilder({
 						iconURL: interaction.guild.iconURL(),
-						text: ticket.guild.footer,
+						text: settings.footer,
 					})
-						.setColor(ticket.guild.errorColour)
+						.setColor(settings.errorColour)
 						.setTitle(getMessage('commands.slash.move.not_staff.title'))
 						.setDescription(getMessage('commands.slash.move.not_staff.description')),
 				],

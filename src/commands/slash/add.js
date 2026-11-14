@@ -4,7 +4,6 @@ const {
 } = require('discord.js');
 const { grantAccess } = require('../../lib/tickets/access');
 const ExtendedEmbedBuilder = require('../../lib/embed');
-const { isStaff } = require('../../lib/users');
 const { logTicketEvent } = require('../../lib/logging');
 
 module.exports = class AddSlashCommand extends SlashCommand {
@@ -48,11 +47,15 @@ module.exports = class AddSlashCommand extends SlashCommand {
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		const ticket = await client.prisma.ticket.findUnique({
-			include: { guild: true },
+			include: {
+				category: true,
+				guild: true,
+			},
 			where: { id: interaction.options.getString('ticket', false) || interaction.channel.id },
 		});
 
-		if (!ticket) {
+		// the ticket option is free text, so it must be checked: only tickets in this server
+		if (!ticket || ticket.guildId !== interaction.guild.id) {
 			const settings = await client.prisma.guild.findUnique({ where: { id: interaction.guild.id } });
 			const getMessage = client.i18n.getLocale(settings.locale);
 			return await interaction.editReply({
@@ -74,7 +77,8 @@ module.exports = class AddSlashCommand extends SlashCommand {
 		if (
 			ticket.id !== interaction.channel.id &&
 			ticket.createdById !== interaction.member.id &&
-			!(await isStaff(interaction.guild, interaction.member.id))
+			// staff for this ticket's category, not just staff somewhere in the server
+			!client.tickets.isCategoryStaff(interaction.member, ticket.category)
 		) {
 			return await interaction.editReply({
 				embeds: [

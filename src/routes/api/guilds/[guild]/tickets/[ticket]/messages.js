@@ -78,7 +78,8 @@ module.exports.post = fastify => ({
 		if (!rateLimit.take(req.user.id)) return error(res, 429, 'You\'re sending messages too quickly.');
 
 		const channel = client.channels.cache.get(ticket.id);
-		if (!channel) return error(res, 503, 'The ticket\'s channel can\'t be found.');
+		// the channel must be in this server (a ticket's ID is its channel's ID)
+		if (!channel || channel.guildId !== guild.id) return error(res, 503, 'The ticket\'s channel can\'t be found.');
 		const member = await guild.members.fetch(req.user.id);
 		const settings = await client.prisma.guild.findUnique({
 			select: {

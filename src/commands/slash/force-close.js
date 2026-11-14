@@ -105,6 +105,20 @@ module.exports = class ForceCloseSlashCommand extends SlashCommand {
 			}
 
 			if (!ticket.open) return await client.tickets.replyClosed(interaction, { guild: settings });
+			// staff can only force-close tickets in the categories they're staff for
+			if (!client.tickets.isCategoryStaff(interaction.member, ticket.category)) {
+				return await interaction.editReply({
+					embeds: [
+						new ExtendedEmbedBuilder({
+							iconURL: interaction.guild.iconURL(),
+							text: settings.footer,
+						})
+							.setColor(settings.errorColour)
+							.setTitle(getMessage('commands.slash.force-close.not_staff.title'))
+							.setDescription(getMessage('commands.slash.force-close.not_staff.description')),
+					],
+				});
+			}
 
 			await interaction.editReply({
 				embeds: [
@@ -143,14 +157,16 @@ module.exports = class ForceCloseSlashCommand extends SlashCommand {
 			}
 
 			const categoryId = interaction.options.getInteger('category', false);
-			const tickets = await client.prisma.ticket.findMany({
+			// only tickets in the categories the member is staff for
+			const tickets = (await client.prisma.ticket.findMany({
+				include: { category: true },
 				where: {
 					categoryId: categoryId ?? undefined, // must be undefined not null
 					guildId: interaction.guild.id, // ! very important
 					lastMessageAt: { lte: new Date(Date.now() - time) },
 					open: true,
 				},
-			});
+			})).filter(t => client.tickets.isCategoryStaff(interaction.member, t.category));
 
 			if (tickets.length === 0) {
 				return await interaction.editReply({
@@ -275,6 +291,20 @@ module.exports = class ForceCloseSlashCommand extends SlashCommand {
 			}
 
 			if (!ticket.open) return await client.tickets.replyClosed(interaction, { guild: settings });
+			// staff can only force-close tickets in the categories they're staff for
+			if (!client.tickets.isCategoryStaff(interaction.member, ticket.category)) {
+				return await interaction.editReply({
+					embeds: [
+						new ExtendedEmbedBuilder({
+							iconURL: interaction.guild.iconURL(),
+							text: settings.footer,
+						})
+							.setColor(settings.errorColour)
+							.setTitle(getMessage('commands.slash.force-close.not_staff.title'))
+							.setDescription(getMessage('commands.slash.force-close.not_staff.description')),
+					],
+				});
+			}
 
 			await interaction.editReply({
 				embeds: [
