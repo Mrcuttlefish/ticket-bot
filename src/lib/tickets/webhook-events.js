@@ -1,4 +1,5 @@
 const { sendWebhook } = require('../webhooks');
+const { anonymiseTicketRow } = require('./anonymous');
 // the worker pool is required lazily so this module can be loaded (e.g. in tests) without starting threads
 const decrypt = value => (value ? require('../threads').pools.crypto.queue(w => w.decrypt(value)) : null);
 
@@ -33,7 +34,11 @@ function buildPayload(event, ticket) {
 	if (event === 'ticket.closed') {
 		Object.assign(payload.ticket, {
 			closedAt: ticket.closedAt,
-			closedById: ticket.closedById,
+			// anonymous tickets don't say which staff member closed them
+			closedById: anonymiseTicketRow({
+				closedById: ticket.closedById,
+				createdById: ticket.createdById,
+			}, Boolean(ticket.category?.anonymous)).closedById,
 			closedReason: ticket.closedReason,
 		});
 	}
@@ -52,6 +57,7 @@ async function sendTicketWebhook(client, event, ticketId) {
 			include: {
 				category: {
 					select: {
+						anonymous: true,
 						id: true,
 						name: true,
 					},

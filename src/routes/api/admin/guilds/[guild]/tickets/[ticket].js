@@ -1,4 +1,5 @@
 const { pools } = require('../../../../../../lib/threads');
+const { anonymiseTicketRow } = require('../../../../../../lib/tickets/anonymous');
 const { export: pool } = pools;
 
 module.exports.get = fastify => ({
@@ -13,6 +14,7 @@ module.exports.get = fastify => ({
 				archivedMessages: true,
 				archivedRoles: true,
 				archivedUsers: true,
+				category: { select: { anonymous: true } },
 				feedback: true,
 				questionAnswers: true,
 			},
@@ -24,8 +26,13 @@ module.exports.get = fastify => ({
 
 		if (!ticket) return res.status(404).send(new Error('Not Found'));
 
+		const anonymous = Boolean(ticket.category?.anonymous);
+		delete ticket.category;
 		res.header('Content-Type', 'application/json'); // exportTicket returns stringified JSON
-		return await pool.queue(w => w.exportTicket(ticket));
+		const exported = await pool.queue(w => w.exportTicket(ticket));
+		if (!anonymous) return exported;
+		// admins don't see who wrote anonymous staff messages either; only the server's full export has them
+		return JSON.stringify(anonymiseTicketRow(JSON.parse(exported), true));
 	},
 	onRequest: [fastify.authenticate, fastify.isAdmin],
 });

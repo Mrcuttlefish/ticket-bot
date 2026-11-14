@@ -1,5 +1,5 @@
 const {
-	getUsers, getViewer, serializeTicket,
+	getUsers, getViewer, serializeTicket, viewableWhere,
 } = require('../../../../../lib/tickets/portal');
 
 const SNOWFLAKE = /^\d{17,20}$/;
@@ -15,13 +15,18 @@ module.exports.get = fastify => ({
 	handler: async (req, res) => {
 		/** @type {import('client')} */
 		const client = req.routeOptions.config.client;
+		const viewer = await getViewer(client, req.params.guild, req.user.id);
 		const {
 			guild, staff,
-		} = await getViewer(client, req.params.guild, req.user.id);
+		} = viewer;
 		const query = req.query ?? {};
 		const limit = Math.min(Math.max(parseInt(query.limit) || 25, 1), 100);
 
-		const where = { guildId: guild.id };
+		// staff only see the categories they're staff for (see portal.js)
+		const where = {
+			guildId: guild.id,
+			...viewableWhere(viewer),
+		};
 		if (query.open === 'true') where.open = true;
 		else if (query.open === 'false') where.open = false;
 		if (query.category !== undefined && query.category !== '') {

@@ -152,3 +152,27 @@ test('webhook payloads include decrypted answers and close details', () => {
 	assert.equal(JSON.stringify(created).includes('should not leak'), false);
 	assert.equal(buildPayload('ticket.closed', ticket).ticket.closedReason, 'done');
 });
+
+test('webhook payloads don\'t say which staff member closed an anonymous ticket', () => {
+	const { buildPayload } = require('../../src/lib/tickets/webhook-events');
+	const ticket = {
+		category: {
+			anonymous: true,
+			id: 3,
+			name: 'Support',
+		},
+		closedById: '2',
+		createdById: '1',
+		guildId: '9',
+		id: '5',
+	};
+	assert.equal(buildPayload('ticket.closed', ticket).ticket.closedById, '0');
+	assert.equal(buildPayload('ticket.closed', {
+		...ticket,
+		closedById: '1',
+	}).ticket.closedById, '1', 'the creator closing their own ticket isn\'t hidden');
+	assert.equal(buildPayload('ticket.closed', {
+		...ticket,
+		category: { anonymous: false },
+	}).ticket.closedById, '2');
+});

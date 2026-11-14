@@ -91,6 +91,7 @@ module.exports.patch = fastify => ({
 		checkCategoryRefs(guild, data, id => client.channels.cache.get(id));
 
 		const select = {
+			anonymous: true,
 			archive: true,
 			autoClose: true,
 			blockedRoles: true,
@@ -103,7 +104,9 @@ module.exports.patch = fastify => ({
 			claimReleaseLocked: true,
 			claimTakeover: true,
 			closeButton: true,
+			cooldown: true,
 			// createdAt: true,
+			customTopic: true,
 			description: true,
 			discordCategory: true,
 			emoji: true,
@@ -141,6 +144,7 @@ module.exports.patch = fastify => ({
 			roleLimits: true,
 			staleAfter: true,
 			staffRoles: true,
+			suggestTags: true,
 			totalLimit: true,
 		};
 

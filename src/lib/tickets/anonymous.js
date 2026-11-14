@@ -126,9 +126,51 @@ function anonymiseTranscript(ticket, staffName) {
 	return ticket;
 }
 
+// the ID shown instead of a hidden staff member (the same as the portal's "Staff" author)
+const STAFF_ID = '0';
+
+/**
+ * Hide staff IDs in a raw ticket row (admin API, webhooks). Bots and the creator are kept.
+ * Works on rows with or without archived data; `archivedUsers` must already be decrypted.
+ * @param {object} ticket a ticket row; nothing is hidden unless `anonymous` is true
+ * @param {boolean} anonymous whether the ticket's category is anonymous
+ * @param {string} [staffName]
+ * @returns {object} the same ticket
+ */
+function anonymiseTicketRow(ticket, anonymous, staffName = 'Staff') {
+	if (!anonymous) return ticket;
+	const bots = new Set((ticket.archivedUsers ?? []).filter(user => user.bot).map(user => user.userId));
+	const isHidden = id => Boolean(id) && id !== ticket.createdById && !bots.has(id);
+	const hide = id => (isHidden(id) ? STAFF_ID : id);
+	if ('claimedById' in ticket) ticket.claimedById = hide(ticket.claimedById);
+	if ('closedById' in ticket) ticket.closedById = hide(ticket.closedById);
+	if (Array.isArray(ticket.archivedMessages)) {
+		for (const message of ticket.archivedMessages) message.authorId = hide(message.authorId);
+	}
+	if (Array.isArray(ticket.archivedUsers)) {
+		const hadStaff = ticket.archivedUsers.some(user => isHidden(user.userId));
+		ticket.archivedUsers = ticket.archivedUsers.filter(user => !isHidden(user.userId));
+		if (hadStaff) {
+			ticket.archivedUsers.push({
+				avatar: null,
+				bot: false,
+				discriminator: '0',
+				displayName: staffName,
+				roleId: null,
+				ticketId: ticket.id,
+				userId: STAFF_ID,
+				username: staffName,
+			});
+		}
+	}
+	return ticket;
+}
+
 module.exports = {
 	NONCE_PREFIX,
+	STAFF_ID,
 	WEB_NONCE_PREFIX,
+	anonymiseTicketRow,
 	anonymiseTranscript,
 	isRelay,
 	isWebReply,
