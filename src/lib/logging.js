@@ -96,6 +96,76 @@ async function shouldLog(client, guildId, event) {
 	return isLogged(settings?.logExclude, event);
 }
 
+// never stored in the change history
+const SECRET_FIELDS = /secret|token|password|key$/i;
+const MAX_CHANGE_LENGTH = 500;
+const HISTORY_DAYS = 365;
+
+const historyValue = value => {
+	if (value === undefined) return null;
+	const text = typeof value === 'string' ? value : JSON.stringify(value);
+	if (text === undefined) return null;
+	return text.length > MAX_CHANGE_LENGTH ? text.slice(0, MAX_CHANGE_LENGTH) + '…' : text;
+};
+
+/**
+ * The fields that changed, for the stored change history. Secrets are left out, and long values are cut short.
+ * @param {{ original?: object, updated?: object } | undefined} diff
+ * @returns {{ field: string, from: string | null, to: string | null }[]}
+ */
+function getHistoryChanges(diff) {
+	if (!diff?.original || !diff?.updated) return [];
+	const changes = [];
+	const keys = new Set([...Object.keys(diff.original), ...Object.keys(diff.updated)]);
+	for (const field of [...keys].sort()) {
+		if (['createdAt', 'id', 'guildId'].includes(field) || SECRET_FIELDS.test(field)) continue;
+		const from = historyValue(diff.original[field]);
+		const to = historyValue(diff.updated[field]);
+		if (from !== to) {
+			changes.push({
+				field,
+				from,
+				to,
+			});
+		}
+		if (changes.length >= 100) break;
+	}
+	return changes;
+}
+
+/**
+ * Store a settings change in the server's change history (Ticket Tool parity, P3), shown in the dashboard.
+ * Entries older than a year are removed. Failures are logged, never thrown.
+ * @param {import("client")} client
+ * @param {object} details
+ */
+async function recordHistory(client, {
+	guildId, userId, action, target, diff,
+}) {
+	try {
+		await client.prisma.auditLog.create({
+			data: {
+				action,
+				changes: action === 'update' ? getHistoryChanges(diff) : null,
+				guild: { connect: { id: guildId } },
+				targetId: String(target.id),
+				targetName: target.name ? String(target.name).slice(0, 191) : null,
+				targetType: target.type,
+				userId,
+			},
+		});
+		await client.prisma.auditLog.deleteMany({
+			where: {
+				createdAt: { lt: new Date(Date.now() - (HISTORY_DAYS * 24 * 60 * 60 * 1000)) },
+				guildId,
+			},
+		});
+	} catch (error) {
+		client.log.warn('Failed to save a settings change to the history');
+		client.log.error(error);
+	}
+}
+
 /**
  * @param {import("client")} client
  * @param {object} details
@@ -103,9 +173,22 @@ async function shouldLog(client, guildId, event) {
  * @param {string} details.userId
  * @param {string} details.action
 */
-async function logAdminEvent(client, {
+function logAdminEvent(client, details) {
+	// the routes don't wait for this; tracking it lets shutdown (and tests) wait for it
+	const promise = sendAdminEvent(client, details);
+	return client.tickets?.track ? client.tickets.track(promise) : promise;
+}
+
+async function sendAdminEvent(client, {
 	guildId, userId, action, target, diff,
 }) {
+	await recordHistory(client, {
+		action,
+		diff,
+		guildId,
+		target,
+		userId,
+	});
 	const settings = await client.prisma.guild.findUnique({
 		select: {
 			footer: true,
@@ -311,7 +394,9 @@ module.exports = {
 	getSUID,
 	guildChannel,
 	isLogged,
+	getHistoryChanges,
 	logAdminEvent,
+	recordHistory,
 	logMessageEvent,
 	logTicketEvent,
 };

@@ -11,7 +11,7 @@ const { schemas } = require('../../src/lib/validation');
 // relations, IDs, timestamps and values the bot keeps itself
 const NOT_SETTINGS = {
 	Category: ['createdAt', 'guild', 'guildId', 'id', 'questions', 'tickets'],
-	Guild: ['categories', 'createdAt', 'feedback', 'id', 'tags', 'tickets'],
+	Guild: ['auditLogs', 'categories', 'createdAt', 'feedback', 'id', 'tags', 'tickets'],
 	Question: ['answers', 'category', 'categoryId', 'createdAt'],
 	Tag: ['createdAt', 'guild', 'guildId', 'id', 'preventedCount'],
 };

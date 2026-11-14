@@ -5,7 +5,9 @@ const Fastify = require('fastify');
 const { short } = require('leeks.js');
 const { join } = require('path');
 const { files } = require('node-dir');
-const { getPrivilegeLevel } = require('../users');
+const {
+	getPrivilegeLevel, hasDashboardRole,
+} = require('../users');
 const { format } = require('util');
 
 /**
@@ -87,7 +89,12 @@ module.exports = async function buildApp(client) {
 	});
 
 	// 2: Manage Server, 3: the server's owner (see users.js getPrivilegeLevel; bot supers are above both)
-	const requirePrivilege = level => async (req, res) => {
+	/**
+	 * @param {number} level
+	 * @param {object} [options]
+	 * @param {boolean} [options.dashboardRoles] whether the server's dashboard roles count as Manage Server (level 2)
+	 */
+	const requirePrivilege = (level, { dashboardRoles = false } = {}) => async (req, res) => {
 		try {
 			const userId = req.user.id;
 			const guildId = req.params.guild;
@@ -116,7 +123,15 @@ module.exports = async function buildApp(client) {
 				});
 			}
 			const guildMember = await guild.members.fetch(userId);
-			if (await getPrivilegeLevel(guildMember) < level) {
+			const privilege = await getPrivilegeLevel(guildMember);
+			// members with one of the server's dashboard roles can change settings (Ticket Tool parity, P3), but
+			// nothing that needs the real permission (see users.js hasDashboardRole)
+			req.viaDashboardRole = false;
+			if (privilege < level && dashboardRoles && level === 2 && await hasDashboardRole(guildMember)) {
+				req.viaDashboardRole = true;
+				return;
+			}
+			if (privilege < level) {
 				return res.code(403).send({
 					error: 'Forbidden',
 					message: level >= 3 ? 'Only the server\'s owner can do this.' : 'You are not permitted for this action.',
@@ -134,7 +149,9 @@ module.exports = async function buildApp(client) {
 			});
 		}
 	};
-	fastify.decorate('isAdmin', requirePrivilege(2));
+	fastify.decorate('isAdmin', requirePrivilege(2, { dashboardRoles: true }));
+	// Manage Server itself, for things dashboard roles can't do (resetting the server's data)
+	fastify.decorate('isManager', requirePrivilege(2));
 	// exports hold every ticket's messages, including who wrote anonymous staff messages, and imports replace
 	// everything, so they're for the server's owner only
 	fastify.decorate('isOwner', requirePrivilege(3));

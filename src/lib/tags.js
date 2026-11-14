@@ -35,6 +35,26 @@ function fillTagPlaceholders(content, {
 }
 
 /**
+ * Validate a tag from the dashboard. A trigger is checked for its match type, which may come from the saved tag
+ * when only the trigger changes.
+ * @param {object} body
+ * @param {string} [savedMatchType]
+ * @returns {object}
+ */
+function sanitizeTag(body, savedMatchType = 'REGEX') {
+	const {
+		ValidationError, sanitize, schemas,
+	} = require('./validation');
+	const { checkTagPattern } = require('./security');
+	const data = sanitize(body, schemas.tag);
+	if (data.regex) {
+		const result = checkTagPattern(data.regex, data.matchType ?? savedMatchType);
+		if (!result.ok) throw new ValidationError('regex', result.reason);
+	}
+	return data;
+}
+
+/**
  * A guild's tags, cached for an hour (the tag routes clear the cache). Sorted with the longest patterns first.
  * @param {import('client')} client
  * @param {string} guildId
@@ -46,8 +66,10 @@ async function getGuildTags(client, guildId) {
 	if (!tags) {
 		tags = (await client.prisma.tag.findMany({
 			select: {
+				autoDm: true,
 				content: true,
 				id: true,
+				matchType: true,
 				name: true,
 				regex: true,
 			},
@@ -62,4 +84,5 @@ async function getGuildTags(client, guildId) {
 module.exports = {
 	fillTagPlaceholders,
 	getGuildTags,
+	sanitizeTag,
 };

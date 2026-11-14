@@ -1,1 +1,0 @@
-import{av as a}from"./XDDRZcps.js";a();

@@ -19,7 +19,7 @@ const {
 	isRelay, isWebReply, relayMessage, shouldRelay,
 } = require('../../lib/tickets/anonymous');
 const { resolveCategorySettings } = require('../../lib/tickets/options');
-const { compileTagRegex } = require('../../lib/security');
+const { compileTagPattern } = require('../../lib/security');
 const {
 	fillTagPlaceholders, getGuildTags,
 } = require('../../lib/tags');
@@ -227,7 +227,11 @@ module.exports = class extends Listener {
 
 					// set first and last message timestamps
 					const staff = await isStaff(message.guild, message.author.id);
-					const data = { lastMessageAt: new Date() };
+					const data = {
+						lastMessageAt: new Date(),
+						// who should reply next, for automations (lib/automations.js)
+						waitingOn: staff ? 'CREATOR' : 'STAFF',
+					};
 					if (ticket.firstResponseAt === null && staff) data.firstResponseAt = new Date();
 
 					handleGhostPing(client, message, ticket, settings, staff).catch(client.log.error);
@@ -296,10 +300,14 @@ module.exports = class extends Listener {
 			) {
 				const tags = await getGuildTags(client, message.guild.id);
 
-				// patterns are validated when saved, but older ones may be invalid or unsafe; compileTagRegex skips those
-				const tag = tags.find(tag => compileTagRegex(tag.regex)?.test(message.content));
+				// patterns are validated when saved, but older ones may be invalid or unsafe; compileTagPattern skips those
+				const tag = tags.find(tag => compileTagPattern(tag)?.test(message.content));
 				if (tag) {
-					await message.reply({
+					const response = {
+						allowedMentions: {
+							parse: [],
+							repliedUser: true,
+						},
 						embeds: [
 							new EmbedBuilder()
 								.setColor(settings.primaryColour)
@@ -314,7 +322,14 @@ module.exports = class extends Listener {
 									user: message.member ?? message.author,
 								})),
 						],
-					});
+					};
+					// auto-responses can be sent privately (Ticket Tool parity, P3); if the member's DMs are closed, reply
+					const sent = tag.autoDm && await message.author.send({
+						...response,
+						allowedMentions: { parse: [] },
+						content: message.url,
+					}).catch(() => null);
+					if (!sent) await message.reply(response);
 				}
 
 			}

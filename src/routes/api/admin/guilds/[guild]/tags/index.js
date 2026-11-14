@@ -1,23 +1,5 @@
 const { logAdminEvent } = require('../../../../../../lib/logging');
-const {
-	ValidationError,
-	sanitize,
-	schemas,
-} = require('../../../../../../lib/validation');
-const { checkTagRegex } = require('../../../../../../lib/security');
-
-/**
- * @param {object} body
- * @returns {object}
- */
-function sanitizeTag(body) {
-	const data = sanitize(body, schemas.tag);
-	if (data.regex) {
-		const result = checkTagRegex(data.regex);
-		if (!result.ok) throw new ValidationError('regex', result.reason);
-	}
-	return data;
-}
+const { sanitizeTag } = require('../../../../../../lib/tags');
 
 module.exports.get = fastify => ({
 	handler: async req => {

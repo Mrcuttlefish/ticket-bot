@@ -117,6 +117,10 @@ model Category {
   roleLimits         Json       @default("[]") // [{ role, limit }] overrides memberLimit
   staffRoles         Json
   staffThread        Boolean    @default(false) // private staff thread in each ticket
+  automations        Json       @default("[]") // [{ waitingOn: STAFF|CREATOR, after: seconds, action: CLOSE|TAG, tag? }]
+  channelType        String     @default("CHANNEL") // CHANNEL, or THREAD for private threads in threadParent
+  onCreatorLeave     String     @default("CLOSE") // CLOSE, KEEP or DELETE open tickets when the creator leaves
+  threadParent       String?    @db.VarChar(19) // text channel that thread tickets are created in
   staleAfter         Int? // seconds; null: use the guild setting, 0: off
   suggestTags        Boolean    @default(false) // suggest matching tags before a ticket is created (upstream #440)
   tickets            Ticket[]
@@ -146,6 +150,8 @@ model Guild {
   autoTag            Json       @default("[]")
   blocklist          Json       @default("[]")
   buttons            Json       @default("{}") // { [button]: { label, emoji, style } }
+  auditLogs          AuditLog[]
+  dashboardRoles     Json       @default("[]") // roles that can change settings in the dashboard (not export or import)
   categories         Category[]
   claimButton        Boolean    @default(false)
   closeButton        Boolean    @default(false)
@@ -222,6 +228,8 @@ model Tag {
   name           String
   preventedCount Int      @default(0) // tickets not opened because this tag solved the problem
   regex          String?
+  autoDm         Boolean  @default(false) // auto-responses are sent to the author in a DM
+  matchType      String   @default("REGEX") // REGEX, or WILDCARD (* and ?, the whole message)
 
   @@unique([guildId, name])
   @@map("tags")
@@ -251,6 +259,8 @@ model Ticket {
   guildId             String            @db.VarChar(19)
   id                  String            @id @db.VarChar(19)
   lastMessageAt       DateTime?
+  automatedAt         DateTime? // when automations last ran for this ticket
+  waitingOn           String? // STAFF or CREATOR: who should send the next message
   messageCount        Int?
   number              Int
   open                Boolean           @default(true)
@@ -290,4 +300,21 @@ enum TicketPriority {
 enum QuestionType {
   MENU
   TEXT
+}
+
+// settings changes made in the dashboard (Ticket Tool parity, P3)
+model AuditLog {
+  action     String // create, update or delete
+  changes    Json? // [{ field, from, to }], with secrets left out
+  createdAt  DateTime @default(now())
+  guild      Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guildId    String   @db.VarChar(19)
+  id         Int      @id @default(autoincrement())
+  targetId   String
+  targetName String?
+  targetType String
+  userId     String   @db.VarChar(19)
+
+  @@index([guildId, createdAt])
+  @@map("audit_logs")
 }

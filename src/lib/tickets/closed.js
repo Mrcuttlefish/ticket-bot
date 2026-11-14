@@ -13,6 +13,7 @@ const {
 	ButtonStyle,
 	OverwriteType,
 } = require('discord.js');
+const { isThreadTicket } = require('./access');
 const { buttonEmoji } = require('../icons');
 const { customiseButton } = require('../buttons');
 
@@ -134,12 +135,43 @@ async function findStaff(guild, ids) {
 }
 
 /**
+ * Thread tickets: take everyone who isn't staff out of the thread, and lock it so only staff can unarchive it.
+ * @param {import('discord.js').ThreadChannel} channel
+ * @param {string} reason
+ * @returns {Promise<string[]>}
+ */
+async function lockThread(channel, reason) {
+	const members = await channel.members.fetch().catch(() => channel.members.cache);
+	const ids = [...members.keys()].filter(id => id !== channel.client.user.id);
+	const staff = await findStaff(channel.guild, ids);
+	const locked = ids.filter(id => !staff.has(id));
+	for (const id of locked) await channel.members.remove(id).catch(() => null);
+	await channel.setLocked(true, reason).catch(() => null);
+	return locked;
+}
+
+/**
+ * Thread tickets: unlock the thread and add the creator back (members added with /add need adding again).
+ * @param {import('discord.js').ThreadChannel} channel
+ * @param {string} creatorId
+ * @param {string} reason
+ * @returns {Promise<string[]>}
+ */
+async function unlockThread(channel, creatorId, reason) {
+	await channel.setArchived?.(false, reason).catch(() => null);
+	await channel.setLocked(false, reason).catch(() => null);
+	await channel.members.add(creatorId).catch(error => channel.client.log.warn(`Couldn't add ${creatorId} back to ticket ${channel.id}`, error));
+	return [creatorId];
+}
+
+/**
  * Remove the creator's and added members' access to a closed ticket's channel.
  * @param {import('discord.js').GuildChannel} channel
  * @param {string} reason audit log reason
  * @returns {Promise<string[]>} the members who were locked out
  */
 async function lockChannel(channel, reason) {
+	if (isThreadTicket(channel)) return await lockThread(channel, reason);
 	const overwrites = [...channel.permissionOverwrites.cache.values()];
 	const staff = await findStaff(channel.guild, overwrites.filter(o => o.type === OverwriteType.Member).map(o => o.id));
 	const ids = getMembersToLock(overwrites, {
@@ -166,6 +198,7 @@ async function lockChannel(channel, reason) {
  * @returns {Promise<string[]>}
  */
 async function unlockChannel(channel, creatorId, reason) {
+	if (isThreadTicket(channel)) return await unlockThread(channel, creatorId, reason);
 	const overwrites = [...channel.permissionOverwrites.cache.values()];
 	const staff = await findStaff(channel.guild, overwrites.filter(o => o.type === OverwriteType.Member).map(o => o.id));
 	const ids = getMembersToUnlock(overwrites, {

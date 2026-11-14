@@ -199,12 +199,52 @@ const buttons = (value, field) => {
 		if (button.style !== undefined && button.style !== null && button.style !== '') {
 			clean.style = buttonStyle(button.style, `${field}.${name}.style`);
 		}
+		// who can use the button (Manage Server can always use it, see lib/buttons.js)
+		for (const list of ['allow', 'deny']) {
+			if (button[list] === undefined || button[list] === null) continue;
+			const ids = [...new Set(types.snowflakes(button[list], `${field}.${name}.${list}`))];
+			if (ids.length > 25) throw new ValidationError(`${field}.${name}.${list}`, 'at most 25 roles');
+			if (ids.length) clean[list] = ids;
+		}
 		if (Object.keys(clean).length) out[name] = clean;
 	}
 	return out;
 };
 
 const CREATOR_ROLE_EVENTS = ['claim', 'close', 'open'];
+
+const oneOf = values => (value, field) => {
+	if (!values.includes(value)) throw new ValidationError(field, `expected one of ${values.join(', ')}`);
+	return value;
+};
+
+// Ticket Tool parity, P3: rules that run when a ticket has been waiting for a reply (see lib/automations.js)
+const AUTOMATION_ACTIONS = ['CLOSE', 'TAG'];
+const AUTOMATION_WAITING_ON = ['CREATOR', 'STAFF'];
+const MIN_AUTOMATION_AFTER = 15 * 60 * 1000; // automations run every 15 minutes
+const MAX_AUTOMATION_AFTER = 90 * 24 * 60 * 60 * 1000;
+
+const automations = (value, field) => {
+	if (!Array.isArray(value) || value.length > 10) throw new ValidationError(field, 'expected up to 10 rules');
+	return value.map((rule, i) => {
+		const at = `${field}[${i}]`;
+		if (!rule || typeof rule !== 'object' || Array.isArray(rule)) throw new ValidationError(at, 'expected an object');
+		const clean = {
+			action: oneOf(AUTOMATION_ACTIONS)(rule.action, `${at}.action`),
+			after: types.int(rule.after, `${at}.after`, {
+				max: MAX_AUTOMATION_AFTER,
+				min: MIN_AUTOMATION_AFTER,
+			}),
+			waitingOn: oneOf(AUTOMATION_WAITING_ON)(rule.waitingOn, `${at}.waitingOn`),
+		};
+		if (clean.action === 'TAG') {
+			clean.tag = types.string(String(rule.tag ?? '').trim(), `${at}.tag`, { max: 100 });
+			if (!clean.tag) throw new ValidationError(`${at}.tag`, 'choose a tag');
+		}
+		return clean;
+	});
+};
+
 
 // roles are also checked against the guild and the admin's own permissions (see lib/creator-roles.js)
 const creatorRoles = (value, field) => {
@@ -239,6 +279,13 @@ const guildSettings = {
 	autoTag: { type: autoTag },
 	blocklist: { type: 'snowflakes' },
 	buttons: { type: buttons },
+	dashboardRoles: {
+		type: (value, field) => {
+			const ids = [...new Set(types.snowflakes(value, field))];
+			if (ids.length > 25) throw new ValidationError(field, 'at most 25 roles');
+			return ids;
+		},
+	},
 	claimButton: { type: 'boolean' },
 	closeButton: { type: 'boolean' },
 	closeRequests: { type: 'boolean' },
@@ -315,6 +362,7 @@ const category = {
 		type: 'int',
 	},
 	anonymous: { type: 'boolean' },
+	automations: { type: automations },
 	blockedRoles: { type: 'snowflakes' },
 	buttonLabel: {
 		nullable: true,
@@ -329,6 +377,7 @@ const category = {
 		options: { max: 100 },
 		type: 'string',
 	},
+	channelType: { type: oneOf(['CHANNEL', 'THREAD']) },
 	claimButton: {
 		nullable: true,
 		type: 'boolean',
@@ -401,6 +450,7 @@ const category = {
 		options: { max: 100 },
 		type: 'string',
 	},
+	onCreatorLeave: { type: oneOf(['CLOSE', 'DELETE', 'KEEP']) },
 	openDm: {
 		nullable: true,
 		options: { max: 2000 },
@@ -444,6 +494,10 @@ const category = {
 	staffRoles: { type: 'snowflakes' },
 	staffThread: { type: 'boolean' },
 	suggestTags: { type: 'boolean' },
+	threadParent: {
+		nullable: true,
+		type: 'snowflake',
+	},
 	totalLimit: { type: 'int' },
 	workingHours: {
 		nullable: true,
@@ -528,10 +582,12 @@ const question = {
 
 /** @type {Record<string, FieldSpec>} */
 const tag = {
+	autoDm: { type: 'boolean' },
 	content: {
 		options: { max: 4096 },
 		type: 'string',
 	},
+	matchType: { type: oneOf(['REGEX', 'WILDCARD']) },
 	name: {
 		options: { max: 100 },
 		type: 'string',
@@ -570,6 +626,8 @@ function sanitizeCategory(body) {
 }
 
 module.exports = {
+	AUTOMATION_ACTIONS,
+	AUTOMATION_WAITING_ON,
 	BUTTON_STYLES,
 	CREATOR_ROLE_EVENTS,
 	CUSTOM_BUTTONS,

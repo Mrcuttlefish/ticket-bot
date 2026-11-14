@@ -15,6 +15,9 @@ const jsonFields = [
 	'logExclude',
 	'creatorRoles',
 	'buttons',
+	'automations',
+	'dashboardRoles',
+	'changes',
 ];
 
 const traverse = (obj, action) => {

@@ -2,6 +2,7 @@ const { SlashCommand } = require('@eartharoid/dbf');
 const {
 	ApplicationCommandOptionType, MessageFlags,
 } = require('discord.js');
+const { revokeAccess } = require('../../lib/tickets/access');
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { isStaff } = require('../../lib/users');
 const { logTicketEvent } = require('../../lib/logging');
@@ -89,7 +90,7 @@ module.exports = class RemoveSlashCommand extends SlashCommand {
 		}
 
 		/** @type {import("discord.js").TextChannel} */
-		const ticketChannel = await interaction.guild.channels.fetch(ticket.id);
+		const ticketChannel = client.channels.cache.get(ticket.id) ?? await interaction.guild.channels.fetch(ticket.id);
 		const member = interaction.options.getMember('member', true);
 
 		if (member.id === client.user.id || member.id === ticket.createdById) {
@@ -102,7 +103,7 @@ module.exports = class RemoveSlashCommand extends SlashCommand {
 			});
 		}
 
-		await ticketChannel.permissionOverwrites.delete(member, `${interaction.user.tag} removed ${member.user.tag} from the ticket`);
+		await revokeAccess(ticketChannel, member, `${interaction.user.tag} removed ${member.user.tag} from the ticket`);
 
 		await ticketChannel.send({
 			embeds: [

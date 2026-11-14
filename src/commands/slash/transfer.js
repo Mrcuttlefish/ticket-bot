@@ -3,6 +3,9 @@ const {
 	ApplicationCommandOptionType,
 	EmbedBuilder,
 } = require('discord.js');
+const {
+	grantAccess, isThreadTicket,
+} = require('../../lib/tickets/access');
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { isStaff } = require('../../lib/users');
 const {
@@ -125,22 +128,16 @@ module.exports = class TransferSlashCommand extends SlashCommand {
 			}),
 			interaction.channel.edit({
 				name: channelName,
-				topic: formatChannelTopic(
-					client.config.tickets?.channelTopic,
-					member.toString(),
-					ticket.topic && await crypto.queue(w => w.decrypt(ticket.topic)),
-				) ?? '',
+				// threads don't have topics
+				...(!isThreadTicket(interaction.channel) && {
+					topic: formatChannelTopic(
+						client.config.tickets?.channelTopic,
+						member.toString(),
+						ticket.topic && await crypto.queue(w => w.decrypt(ticket.topic)),
+					) ?? '',
+				}),
 			}),
-			interaction.channel.permissionOverwrites.edit(
-				member,
-				{
-					AttachFiles: true,
-					EmbedLinks: true,
-					ReadMessageHistory: true,
-					SendMessages: true,
-					ViewChannel: true,
-				},
-			),
+			grantAccess(interaction.channel, member, `${interaction.user.tag} transferred the ticket to ${member.user.tag}`),
 		]);
 
 		const $category = client.tickets.$count.categories[ticket.categoryId];

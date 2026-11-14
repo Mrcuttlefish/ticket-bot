@@ -1,4 +1,5 @@
 const { Button } = require('@eartharoid/dbf');
+const { buttonDenied } = require('../lib/buttons');
 const {
 	ActionRowBuilder,
 	MessageFlags,
@@ -22,6 +23,7 @@ module.exports = class EditButton extends Button {
 	}
 
 	async run(id, interaction) {
+		if (await buttonDenied(this.client, interaction, 'edit')) return;
 		/** @type {import("client")} */
 		const client = this.client;
 

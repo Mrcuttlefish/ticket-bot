@@ -1,4 +1,5 @@
 const { Button } = require('@eartharoid/dbf');
+const { buttonDenied } = require('../lib/buttons');
 
 // on the "ticket closed" message in channels that are kept after closing
 module.exports = class ReopenButton extends Button {
@@ -14,6 +15,7 @@ module.exports = class ReopenButton extends Button {
 	 * @param {import("discord.js").ButtonInteraction} interaction
 	 */
 	async run(id, interaction) {
+		if (await buttonDenied(this.client, interaction, 'reopen')) return;
 		/** @type {import("client")} */
 		const client = this.client;
 
