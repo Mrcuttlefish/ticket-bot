@@ -8,6 +8,7 @@ const { ChannelType: { GuildCategory } } = require('discord.js');
 const ms = require('ms');
 const { sanitizeCategory } = require('../../../../../../lib/validation');
 const { checkCategoryRefs } = require('../../../../../../lib/category-refs');
+const { checkCreatorRoles } = require('../../../../../../lib/tickets/lifecycle');
 const {
 	getAverageTimes, getAverageRating,
 } = require('../../../../../../lib/stats');
@@ -90,6 +91,9 @@ module.exports.post = fastify => ({
 
 		// drop roles that aren't in this server and reject Discord categories from other servers
 		checkCategoryRefs(guild, data, id => client.channels.cache.get(id));
+		if (data.creatorRoles && Object.keys(data.creatorRoles).length) {
+			checkCreatorRoles(guild, await guild.members.fetch(req.user.id), data.creatorRoles);
+		}
 
 		if (!data.discordCategory) {
 			let name = data.name;

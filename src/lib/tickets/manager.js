@@ -49,6 +49,10 @@ const {
 	buildTranscriptAttachment, transcriptTargets,
 } = require('./transcript-file');
 const { PermissionsBitField } = require('discord.js');
+const {
+	applyCreatorRoles, countKeptClosedTickets, createStaffThread, formatLifecycleMessage,
+} = require('./lifecycle');
+const { customiseButton } = require('../buttons');
 
 const { crypto } = pools;
 
@@ -77,6 +81,25 @@ module.exports = class TicketManager {
 		this.$stale = new Collection();
 		// IDs of anonymous staff messages that were posted again by the bot (see anonymous.js)
 		this.$relayed = new Set();
+		// work started after a ticket is created that the member doesn't wait for (see settle())
+		this.$background = new Set();
+	}
+
+	/**
+	 * Keep track of background work so it can be waited for (when shutting down, and in tests).
+	 * @param {Promise} promise
+	 */
+	track(promise) {
+		const tracked = Promise.resolve(promise)
+			.catch(error => this.client.log.error(error))
+			.finally(() => this.$background.delete(tracked));
+		this.$background.add(tracked);
+		return tracked;
+	}
+
+	/** Wait for background work started by track() to finish. */
+	async settle() {
+		while (this.$background.size) await Promise.allSettled([...this.$background]);
 	}
 
 	/**
@@ -283,6 +306,43 @@ module.exports = class TicketManager {
 
 		// the main Discord category, or the first fallback category that isn't full (upstream #472)
 		if (!this.pickDiscordCategory(guild, category)) return await sendError('category_full');
+
+		// open tickets across every category (Ticket Tool parity, P2)
+		if (category.guild.userLimit > 0) {
+			const open = await this.client.prisma.ticket.count({
+				where: {
+					createdById: interaction.user.id,
+					guildId: category.guild.id,
+					open: true,
+				},
+			});
+			if (open >= category.guild.userLimit) return await sendError('user_limit');
+		}
+
+		// closed tickets whose channels are kept still take up room
+		if (category.closedLimit > 0 && keepsClosedChannels(category)) {
+			const closed = await countKeptClosedTickets(this.client, category.id, interaction.user.id);
+			if (closed >= category.closedLimit) return await sendError('closed_limit');
+		}
+
+		// categories can block new tickets outside working hours, using their own hours or the server's
+		if (category.outOfHours === 'BLOCK') {
+			const status = getWorkingStatus(category.workingHours ?? category.guild.workingHours, undefined, category.guild.holidays);
+			if (!status.working) {
+				return await interaction.reply({
+					embeds: [
+						new ExtendedEmbedBuilder({
+							iconURL: guild.iconURL(),
+							text: category.guild.footer,
+						})
+							.setColor(category.guild.errorColour)
+							.setTitle(getMessage('misc.out_of_hours.title'))
+							.setDescription(getMessage(status.timestamp ? 'misc.out_of_hours.description' : 'misc.out_of_hours.no_hours', { timestamp: status.timestamp })),
+					],
+					flags: MessageFlags.Ephemeral,
+				});
+			}
+		}
 
 		const totalCount = await this.getTotalCount(category.id);
 		if (totalCount >= category.totalLimit) return await sendError('category_full');
@@ -516,6 +576,7 @@ module.exports = class TicketManager {
 			buttons: buildButtons({
 				claim: categorySettings.claimButton && category.claiming ? 'claim' : null,
 				close: categorySettings.closeButton,
+				custom: category.guild.buttons,
 				edit: Boolean(topic || answers),
 				getMessage,
 			}),
@@ -721,14 +782,25 @@ module.exports = class TicketManager {
 
 			increment('tickets_created_total');
 			sendTicketWebhook(this.client, 'ticket.created', ticket.id);
-			logTicketEvent(this.client, {
+			this.track(this.afterCreate({
+				category,
+				channel,
+				creator,
+				getMessage,
+				guild,
+				ticket: {
+					...ticket,
+					topic,
+				},
+			}));
+			this.track(logTicketEvent(this.client, {
 				action: 'create',
 				target: {
 					id: ticket.id,
 					name: channel.toString(),
 				},
 				userId: interaction.user.id,
-			});
+			}));
 		} catch (error) {
 			const ref = getSUID();
 			this.client.log.warn.tickets('An error occurred whilst creating ticket', channel.id);
@@ -750,7 +822,7 @@ module.exports = class TicketManager {
 		}
 
 		try {
-			const status = getWorkingStatus(category.guild.workingHours, undefined, category.guild.holidays);
+			const status = getWorkingStatus(category.workingHours ?? category.guild.workingHours, undefined, category.guild.holidays);
 			const working = status.working;
 
 			if (!working && status.timestamp) {
@@ -790,8 +862,41 @@ module.exports = class TicketManager {
 	}
 
 	/**
-	 * @param {import("discord.js").ChatInputCommandInteraction|import("discord.js").ButtonInteraction} interaction
+	 * Things that happen after a ticket is created (Ticket Tool parity, P2): creator roles, the opening DM and the
+	 * private staff thread. Each one is optional and failures don't affect the ticket.
+	 * @param {object} options
 	 */
+	async afterCreate({
+		category, channel, creator, getMessage, guild, ticket,
+	}) {
+		await applyCreatorRoles(this.client, guild, category, creator.id, 'open');
+		if (category.openDm) {
+			const text = formatLifecycleMessage(category.openDm, {
+				category,
+				creator,
+				ticket,
+			});
+			if (text) {
+				await creator.send({
+					embeds: [
+						new ExtendedEmbedBuilder({
+							iconURL: guild.iconURL(),
+							text: category.guild.footer,
+						})
+							.setColor(category.guild.primaryColour)
+							.setTitle(getMessage('dm.opened.title', { guild: guild.name }))
+							.setDescription(text.slice(0, 4096))
+							.addFields({
+								name: getMessage('dm.opened.fields.ticket'),
+								value: channel.toString(),
+							}),
+					],
+				}).catch(() => this.client.log.verbose(`Couldn't send the opening DM for ticket ${ticket.id}`));
+			}
+		}
+		if (category.staffThread) await createStaffThread(channel, category, ticket.number, getMessage);
+	}
+
 	/**
 	 * Reply (ephemerally) that a ticket is closed, or that the channel isn't a ticket.
 	 * @param {import("discord.js").RepliableInteraction} interaction
@@ -930,6 +1035,7 @@ module.exports = class TicketManager {
 			await editOpeningButtons(openingMessage, buildButtons({
 				claim: categorySettings.claimButton && ticket.category.claiming ? 'unclaim' : null,
 				close: categorySettings.closeButton,
+				custom: ticket.guild.buttons,
 				edit: Boolean(ticket.topic || ticket._count.questionAnswers !== 0),
 				getMessage,
 			}));
@@ -942,6 +1048,9 @@ module.exports = class TicketManager {
 					.setDescription(getMessage('ticket.claimed', { user: ticket.category?.anonymous ? getMessage('ticket.anonymous.staff') : interaction.user.toString() })),
 			],
 		});
+
+		// only the first claim changes the creator's roles, not a takeover
+		if (!previous) await applyCreatorRoles(this.client, interaction.guild, ticket.category, ticket.createdById, 'claim');
 
 		// after replying: renames can be rate limited by Discord (2 per 10 minutes) and wait a long time
 		await this.applyClaimedChannel(interaction.channel, ticket, interaction.user, reason);
@@ -1056,6 +1165,7 @@ module.exports = class TicketManager {
 			await editOpeningButtons(openingMessage, buildButtons({
 				claim: categorySettings.claimButton && ticket.category.claiming ? 'claim' : null,
 				close: categorySettings.closeButton,
+				custom: ticket.guild.buttons,
 				edit: Boolean(ticket.topic || ticket._count.questionAnswers !== 0),
 				getMessage,
 			}));
@@ -1146,6 +1256,39 @@ module.exports = class TicketManager {
 					.setDescription(getMessage('ticket.reopened', { user: ticket.category?.anonymous ? getMessage('ticket.anonymous.staff') : interaction.user.toString() })),
 			],
 		});
+
+		if (ticket.category?.reopenedMessage) {
+			const creator = await interaction.guild.members.fetch(ticket.createdById).catch(() => null);
+			const text = formatLifecycleMessage(ticket.category.reopenedMessage, {
+				category: ticket.category,
+				creator,
+				ticket: {
+					...ticket,
+					topic: ticket.topic && await crypto.queue(w => w.decrypt(ticket.topic)),
+				},
+			});
+			if (text) {
+				await interaction.channel.send({
+					allowedMentions: { users: [ticket.createdById] },
+					embeds: [
+						new ExtendedEmbedBuilder()
+							.setColor(ticket.guild.primaryColour)
+							.setDescription(text.slice(0, 4096)),
+					],
+				}).catch(error => this.client.log.warn(`Failed to send the reopened message in ticket ${ticket.id}`, error));
+			}
+		}
+
+		// the closed channel name goes back to the open (or claimed) name
+		if (ticket.category?.closedChannelName) {
+			const claimer = ticket.claimedById ? await this.client.users.fetch(ticket.claimedById).catch(() => null) : null;
+			const template = claimer && ticket.category.claimedChannelName ? ticket.category.claimedChannelName : ticket.category.channelName;
+			const name = await this.ticketChannelName(template, ticket, interaction.guild, claimer);
+			if (name && name !== interaction.channel.name) {
+				await interaction.channel.setName(name, `Ticket reopened by ${interaction.user.tag}`)
+					.catch(error => this.client.log.warn(`Failed to rename reopened ticket ${ticket.id}`, error));
+			}
+		}
 
 		logTicketEvent(this.client, {
 			action: 'reopen',
@@ -1484,6 +1627,26 @@ module.exports = class TicketManager {
 				? getMessage('ticket.anonymous.staff')
 				: `<@${ticket.closedById}>`;
 
+		// the custom closed message (Ticket Tool parity, P2), with the closer's name hidden in anonymous tickets
+		let closedMessage = null;
+		if (ticket.category?.closedMessage) {
+			const claimer = ticket.claimedById
+				? ticket.category.anonymous ? getMessage('ticket.anonymous.staff') : `<@${ticket.claimedById}>`
+				: null;
+			closedMessage = formatLifecycleMessage(ticket.category.closedMessage, {
+				category: ticket.category,
+				claimer,
+				creator: guild?.members.cache.get(ticket.createdById) ?? null,
+				reason,
+				ticket: {
+					...ticket,
+					topic: ticket.topic && await crypto.queue(w => w.decrypt(ticket.topic)),
+				},
+			}) || null;
+		}
+
+		await applyCreatorRoles(this.client, guild, ticket.category, ticket.createdById, 'close');
+
 		if (keep) {
 			try {
 				await lockChannel(channel, auditReason);
@@ -1493,10 +1656,11 @@ module.exports = class TicketManager {
 				})
 					.setColor(ticket.guild.primaryColour)
 					.setTitle(getMessage('ticket.closed_kept.title'))
-					.setDescription(
+					.setDescription((
 						getMessage('ticket.closed_kept.description', { user: closerName }) +
-						(ticket.channelDeleteAt ? '\n' + getMessage('ticket.closed_kept.delete_at', { timestamp: Math.floor(ticket.channelDeleteAt / 1000) }) : ''),
-					);
+						(ticket.channelDeleteAt ? '\n' + getMessage('ticket.closed_kept.delete_at', { timestamp: Math.floor(ticket.channelDeleteAt / 1000) }) : '') +
+						(closedMessage ? '\n\n' + closedMessage : '')
+					).slice(0, 4096));
 				if (reason) {
 					embed.addFields({
 						name: getMessage('dm.closed.fields.reason'),
@@ -1505,11 +1669,20 @@ module.exports = class TicketManager {
 				}
 				await channel.send({
 					components: [buildClosedControls(getMessage, {
+						custom: ticket.guild.buttons,
 						ticketId: ticket.id,
 						transcript: categorySettings.archive,
 					})],
 					embeds: [embed],
 				});
+				if (ticket.category.closedChannelName) {
+					// after locking: renames can be rate limited and wait a long time
+					const name = await this.ticketChannelName(ticket.category.closedChannelName, ticket, guild, null);
+					if (name && name !== channel.name) {
+						channel.setName(name, auditReason)
+							.catch(error => this.client.log.warn(`Failed to rename closed ticket ${ticket.id}`, error));
+					}
+				}
 			} catch (error) {
 				// never leave the creator with access to a closed ticket: if it can't be locked, delete it as before
 				this.client.log.error(`Failed to lock the channel of closed ticket ${ticket.id}; deleting it instead`, error);
@@ -1550,7 +1723,7 @@ module.exports = class TicketManager {
 		if (categorySettings.archive) {
 			components.push(
 				new ActionRowBuilder()
-					.addComponents(
+					.addComponents(customiseButton(
 						new ButtonBuilder()
 							.setCustomId(JSON.stringify({
 								action: 'transcript',
@@ -1559,8 +1732,9 @@ module.exports = class TicketManager {
 							.setStyle(ButtonStyle.Primary)
 							.setEmoji(buttonEmoji(getMessage, 'transcript'))
 							.setLabel(getMessage('buttons.transcript.text')),
-
-					),
+						ticket.guild.buttons,
+						'transcript',
+					)),
 			);
 		}
 
@@ -1616,6 +1790,7 @@ module.exports = class TicketManager {
 		})
 			.setColor(ticket.guild.primaryColour)
 			.setTitle(getMessage('dm.closed.title'));
+		if (closedMessage) dmEmbed.setDescription(closedMessage.slice(0, 4096));
 
 		dmEmbed.addFields(fields.ticket);
 		if (ticket.topic) dmEmbed.addFields(fields.topic);

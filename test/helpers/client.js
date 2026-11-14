@@ -88,6 +88,8 @@ async function createTestClient({ config = {} } = {}) {
 	client.tickets = new TicketManager(client);
 	client.tickets.closeDelay = 0;
 	client.cleanup = async () => {
+		// let work the bot does in the background finish before the database goes away
+		await client.tickets?.settle?.();
 		await db.cleanup();
 	};
 	return client;

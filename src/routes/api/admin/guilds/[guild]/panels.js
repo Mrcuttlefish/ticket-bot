@@ -13,6 +13,9 @@ const emoji = require('node-emoji');
 const { logAdminEvent } = require('../../../../../lib/logging');
 const { buildPanel } = require('../../../../../lib/panel');
 const { buttonEmoji } = require('../../../../../lib/icons');
+const {
+	customiseButton, toButtonStyle,
+} = require('../../../../../lib/buttons');
 
 module.exports.post = fastify => ({
 	handler: async (req, res) => {
@@ -23,6 +26,7 @@ module.exports.post = fastify => ({
 
 		const settings = await client.prisma.guild.findUnique({
 			select: {
+				buttons: true,
 				categories: true,
 				componentsV2: true,
 				footer: true,
@@ -123,7 +127,7 @@ module.exports.post = fastify => ({
 
 			if (categories.length === 1 && data.type !== 'BUTTON') {
 				// a single-category "menu" panel shows one generic button
-				components.push(
+				components.push(customiseButton(
 					new ButtonBuilder()
 						.setCustomId(JSON.stringify({
 							action: 'create',
@@ -132,7 +136,9 @@ module.exports.post = fastify => ({
 						.setStyle(Primary)
 						.setLabel(getMessage('buttons.create.text'))
 						.setEmoji(buttonEmoji(getMessage, 'create')),
-				);
+					settings.buttons,
+					'create',
+				));
 			} else if (data.type === 'BUTTON') {
 				// button panels use each category's name and emoji, even with a single category (upstream #450, #616)
 				components.push(
@@ -142,8 +148,9 @@ module.exports.post = fastify => ({
 								action: 'create',
 								target: category.id,
 							}))
-							.setStyle(categories.length === 1 ? Primary : Secondary)
-							.setLabel(category.name)
+							// categories can choose their button's label and colour (Ticket Tool parity, P2)
+							.setStyle(toButtonStyle(category.buttonStyle) ?? (categories.length === 1 ? Primary : Secondary))
+							.setLabel(category.buttonLabel || category.name)
 							.setEmoji(emoji.hasEmoji(category.emoji) ? emoji.get(category.emoji) : { id: category.emoji }),
 					),
 				);

@@ -14,6 +14,7 @@ const {
 	OverwriteType,
 } = require('discord.js');
 const { buttonEmoji } = require('../icons');
+const { customiseButton } = require('../buttons');
 
 /**
  * Whether a category keeps ticket channels after they close.
@@ -78,20 +79,23 @@ function getMembersToUnlock(overwrites, {
  * @param {object} options
  * @param {string} options.ticketId
  * @param {boolean} options.transcript whether the ticket was archived
+ * @param {object} [options.custom] the guild's button customisation (`guild.buttons`)
  * @returns {ActionRowBuilder}
  */
 function buildClosedControls(getMessage, {
-	ticketId, transcript,
+	ticketId, transcript, custom = null,
 }) {
-	const row = new ActionRowBuilder().addComponents(
+	const row = new ActionRowBuilder().addComponents(customiseButton(
 		new ButtonBuilder()
 			.setCustomId(JSON.stringify({ action: 'reopen' }))
 			.setStyle(ButtonStyle.Success)
 			.setEmoji(buttonEmoji(getMessage, 'reopen'))
 			.setLabel(getMessage('buttons.reopen.text')),
-	);
+		custom,
+		'reopen',
+	));
 	if (transcript) {
-		row.addComponents(
+		row.addComponents(customiseButton(
 			new ButtonBuilder()
 				.setCustomId(JSON.stringify({
 					action: 'transcript',
@@ -100,15 +104,19 @@ function buildClosedControls(getMessage, {
 				.setStyle(ButtonStyle.Primary)
 				.setEmoji(buttonEmoji(getMessage, 'transcript'))
 				.setLabel(getMessage('buttons.transcript.text')),
-		);
+			custom,
+			'transcript',
+		));
 	}
-	row.addComponents(
+	row.addComponents(customiseButton(
 		new ButtonBuilder()
 			.setCustomId(JSON.stringify({ action: 'delete' }))
 			.setStyle(ButtonStyle.Danger)
 			.setEmoji(buttonEmoji(getMessage, 'delete'))
 			.setLabel(getMessage('buttons.delete.text')),
-	);
+		custom,
+		'delete',
+	));
 	return row;
 }
 

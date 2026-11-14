@@ -144,6 +144,9 @@ commands:
     move:
       description: Move a ticket to another category
       moved: 🗃️ {by} has moved this ticket from **{from}** to **{to}**.
+      moved_reason: |-
+        🗃️ {by} has moved this ticket from **{from}** to **{to}**.
+        **Reason:** {reason}
       name: move
       not_staff:
         description: Only staff members can move tickets.
@@ -152,6 +155,9 @@ commands:
         category:
           description: The category to move the ticket to
           name: category
+        reason:
+          description: Why the ticket is being moved
+          name: reason
     new:
       description: Create a new ticket
       name: new
@@ -320,6 +326,10 @@ dm:
     title: Your ticket has been closed
   confirm_open:
     title: Do you want to open a ticket with the following topic?
+  opened:
+    fields:
+      ticket: Ticket
+    title: Your ticket in {guild} has been opened
 log:
   admin:
     changes: Changes
@@ -378,6 +388,9 @@ misc:
       The category has reached its maximum capacity.
       Please try again later.
     title: ❌ Category full
+  closed_limit:
+    description: You have too many closed tickets in this category. Please wait for staff to delete one.
+    title: ❌ Too many closed tickets
   cooldown:
     description: Please wait {time} before creating another ticket in this category.
     title: ❌ Please wait
@@ -414,6 +427,10 @@ misc:
       No ticket categories have been configured.
       Configure your server at {url}.
     title: ❌ There are no ticket categories
+  out_of_hours:
+    description: Staff aren't working right now. You can open a ticket <t:{timestamp}:R>.
+    no_hours: Staff aren't working right now, so tickets can't be opened in this category.
+    title: ❌ Outside working hours
   not_creator:
     description: Only the person who created this ticket can do that.
     title: ❌ This isn't your ticket
@@ -452,6 +469,9 @@ misc:
   unknown_category:
     description: Please try a different category.
     title: ❌ That ticket category doesn't exist
+  user_limit:
+    description: Please close one of your existing tickets before creating another.
+    title: ❌ You have too many open tickets
   update:
     description: |
       > [View `{version}` on GitHub]({github})
@@ -546,6 +566,9 @@ ticket:
   release_locked: ❌ Only {user}, who claimed this ticket, can release it.
   released: ♻️ {user} has released this ticket.
   reopened: 🔓 {user} reopened this ticket.
+  staff_thread:
+    message: Private thread for staff. The ticket's creator can't see it.
+    name: staff-{number}
   transcript_saved: 📄 Transcript of {ticket}, closed by {user}
   suggestions:
     buttons:
