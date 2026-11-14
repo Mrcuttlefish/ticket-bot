@@ -26,6 +26,7 @@ const {
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('../embed');
 const { buttonEmoji } = require('../icons');
+const { customiseButton } = require('../buttons');
 
 // component IDs (any positive 32-bit integer that is unique in the message)
 const IDS = {
@@ -85,6 +86,7 @@ function fieldsToMarkdown(fields) {
  * @param {boolean} [options.edit]
  * @param {'claim'|'unclaim'|null} [options.claim]
  * @param {boolean} [options.close]
+ * @param {object} [options.custom] the guild's button customisation (`guild.buttons`)
  * @returns {ActionRowBuilder|null} null if there are no buttons
  */
 function buildButtons({
@@ -92,34 +94,41 @@ function buildButtons({
 	edit = false,
 	claim = null,
 	close = false,
+	custom = null,
 }) {
 	const row = new ActionRowBuilder();
 	if (edit) {
-		row.addComponents(
+		row.addComponents(customiseButton(
 			new ButtonBuilder()
 				.setCustomId(JSON.stringify({ action: 'edit' }))
 				.setStyle(ButtonStyle.Secondary)
 				.setEmoji(buttonEmoji(getMessage, 'edit'))
 				.setLabel(getMessage('buttons.edit.text')),
-		);
+			custom,
+			'edit',
+		));
 	}
 	if (claim) {
-		row.addComponents(
+		row.addComponents(customiseButton(
 			new ButtonBuilder()
 				.setCustomId(JSON.stringify({ action: claim }))
 				.setStyle(ButtonStyle.Secondary)
 				.setEmoji(buttonEmoji(getMessage, claim))
 				.setLabel(getMessage(`buttons.${claim}.text`)),
-		);
+			custom,
+			claim,
+		));
 	}
 	if (close) {
-		row.addComponents(
+		row.addComponents(customiseButton(
 			new ButtonBuilder()
 				.setCustomId(JSON.stringify({ action: 'close' }))
 				.setStyle(ButtonStyle.Danger)
 				.setEmoji(buttonEmoji(getMessage, 'close'))
 				.setLabel(getMessage('buttons.close.text')),
-		);
+			custom,
+			'close',
+		));
 	}
 	return row.components.length ? row : null;
 }

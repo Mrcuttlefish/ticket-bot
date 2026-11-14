@@ -72,17 +72,23 @@ model Category {
   archive            Boolean? // null: use the guild setting
   autoClose          Int? // seconds; null: use the guild setting, 0: off
   blockedRoles       String     @default("[]") // in addition to the guild blocklist
+  buttonLabel        String? // panel button label; null: the category name
+  buttonStyle        String? // PRIMARY, SECONDARY, SUCCESS or DANGER; null: the default
   channelName        String
   claimButton        Boolean? // null: use the guild setting
-  claiming           Boolean    @default(false)
-  claimHide          Boolean    @default(true) // hide claimed tickets from the rest of the staff
-  claimReleaseLocked Boolean    @default(false) // only the claimer (or a server manager) can release
-  claimTakeover      Boolean    @default(false) // staff can take over a ticket someone else claimed
   claimedCategory    String? // Discord category to move claimed tickets to
   claimedChannelName String? // channel name while claimed; null: keep the name
+  claimHide          Boolean    @default(true) // hide claimed tickets from the rest of the staff
+  claiming           Boolean    @default(false)
+  claimReleaseLocked Boolean    @default(false) // only the claimer (or a server manager) can release
+  claimTakeover      Boolean    @default(false) // staff can take over a ticket someone else claimed
   closeButton        Boolean? // null: use the guild setting
-  createdAt          DateTime   @default(now())
+  closedChannelName  String? // channel name while closed (kept channels); null: keep the name
+  closedLimit        Int        @default(0) // closed tickets with kept channels a member can have; 0: no limit
+  closedMessage      String? // added to the closed message and DM
   cooldown           Int? // seconds
+  createdAt          DateTime   @default(now())
+  creatorRoles       String     @default("{}") // { open|claim|close: { add: [], remove: [] } } for the creator
   customTopic        String?
   description        String
   discordCategory    String
@@ -96,20 +102,25 @@ model Category {
   keepClosedFor      Int? // seconds to keep the channel after closing; null: delete at close, 0: until deleted
   memberLimit        Int        @default(1)
   name               String
+  openDm             String? // DM to the creator when the ticket opens
   openingMessage     String
   openingStyle       String     @default("EMBED") // EMBED (or Components V2 if the guild uses it), TEXT, or OFF
+  outOfHours         String     @default("WARN") // WARN or BLOCK new tickets outside working hours
   pingRoleRules      String     @default("[]") // [{ roles: [creator roles], ping: [roles to ping] }]
   pingRoles          String     @default("[]")
   questions          Question[]
   ratelimit          Int?
+  reopenedMessage    String? // posted when the ticket is reopened
   requiredRoles      String     @default("[]")
   requireTopic       Boolean    @default(false)
   roleLimits         String     @default("[]") // [{ role, limit }] overrides memberLimit
-  staleAfter         Int? // seconds; null: use the guild setting, 0: off
   staffRoles         String
+  staffThread        Boolean    @default(false) // private staff thread in each ticket
+  staleAfter         Int? // seconds; null: use the guild setting, 0: off
   suggestTags        Boolean    @default(false) // suggest matching tags before a ticket is created (upstream #440)
   tickets            Ticket[]
   totalLimit         Int        @default(50)
+  workingHours       String? // overrides the guild working hours; null: use the guild setting
 
   @@map("categories")
 }
@@ -129,10 +140,11 @@ model Feedback {
 }
 
 model Guild {
+  archive            Boolean    @default(true)
   autoClose          Int        @default(43200) // seconds
   autoTag            String     @default("[]")
-  archive            Boolean    @default(true)
   blocklist          String     @default("[]")
+  buttons            String     @default("{}") // { [button]: { label, emoji, style } }
   categories         Category[]
   claimButton        Boolean    @default(false)
   closeButton        Boolean    @default(false)
@@ -148,14 +160,17 @@ model Guild {
   locale             String     @default("en-GB")
   logChannel         String?
   logExclude         String     @default("[]") // events not sent to the log channel
+  moveRelease        Boolean    @default(false) // /move releases claimed tickets
+  moveResend         Boolean    @default(false) // /move sends the new category's opening message
   primaryColour      String     @default("#009999")
   staleAfter         Int? // seconds
   successColour      String     @default("Green")
   tags               Tag[]
   ticketNumberOffset Int        @default(0)
+  tickets            Ticket[]
   transcriptChannel  String? // HTML transcripts are posted here when tickets close
   transcriptDm       Boolean    @default(false) // attach the HTML transcript to the closed DM
-  tickets            Ticket[]
+  userLimit          Int        @default(0) // open tickets per member across all categories; 0: no limit
   webhookSecret      String? // encrypted
   webhookUrl         String?
   workingHours       String     @default("[\"UTC\", [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"], [\"00:00\",\"23:59\"]]")

@@ -174,6 +174,58 @@ const webhookUrl = (value, field) => {
 	return result.url.href;
 };
 
+const BUTTON_STYLES = ['PRIMARY', 'SECONDARY', 'SUCCESS', 'DANGER'];
+const buttonStyle = (value, field) => {
+	if (!BUTTON_STYLES.includes(value)) throw new ValidationError(field, `expected one of ${BUTTON_STYLES.join(', ')}`);
+	return value;
+};
+
+// buttons whose label, emoji and colour can be changed (see lib/buttons.js)
+const CUSTOM_BUTTONS = ['claim', 'close', 'create', 'delete', 'edit', 'reopen', 'transcript', 'unclaim'];
+
+const buttons = (value, field) => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ValidationError(field, 'expected an object');
+	const out = {};
+	for (const [name, button] of Object.entries(value)) {
+		if (!CUSTOM_BUTTONS.includes(name)) throw new ValidationError(`${field}.${name}`, `expected one of ${CUSTOM_BUTTONS.join(', ')}`);
+		if (!button || typeof button !== 'object' || Array.isArray(button)) throw new ValidationError(`${field}.${name}`, 'expected an object');
+		const clean = {};
+		if (button.label !== undefined && button.label !== null && button.label !== '') {
+			clean.label = types.string(String(button.label).trim(), `${field}.${name}.label`, { max: 80 });
+		}
+		if (button.emoji !== undefined && button.emoji !== null && button.emoji !== '') {
+			clean.emoji = types.string(String(button.emoji).trim(), `${field}.${name}.emoji`, { max: 64 });
+		}
+		if (button.style !== undefined && button.style !== null && button.style !== '') {
+			clean.style = buttonStyle(button.style, `${field}.${name}.style`);
+		}
+		if (Object.keys(clean).length) out[name] = clean;
+	}
+	return out;
+};
+
+const CREATOR_ROLE_EVENTS = ['claim', 'close', 'open'];
+
+// roles are also checked against the guild and the admin's own permissions (see lib/creator-roles.js)
+const creatorRoles = (value, field) => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ValidationError(field, 'expected an object');
+	const out = {};
+	for (const [event, change] of Object.entries(value)) {
+		if (!CREATOR_ROLE_EVENTS.includes(event)) throw new ValidationError(`${field}.${event}`, `expected one of ${CREATOR_ROLE_EVENTS.join(', ')}`);
+		if (!change || typeof change !== 'object' || Array.isArray(change)) throw new ValidationError(`${field}.${event}`, 'expected { add, remove }');
+		const add = types.snowflakes(change.add ?? [], `${field}.${event}.add`);
+		const remove = types.snowflakes(change.remove ?? [], `${field}.${event}.remove`);
+		if (add.length + remove.length > 10) throw new ValidationError(`${field}.${event}`, 'at most 10 roles');
+		if (add.length || remove.length) {
+			out[event] = {
+				add: [...new Set(add)],
+				remove: [...new Set(remove)],
+			};
+		}
+	}
+	return out;
+};
+
 /** @type {Record<string, FieldSpec>} */
 const guildSettings = {
 	archive: { type: 'boolean' },
@@ -186,6 +238,7 @@ const guildSettings = {
 	},
 	autoTag: { type: autoTag },
 	blocklist: { type: 'snowflakes' },
+	buttons: { type: buttons },
 	claimButton: { type: 'boolean' },
 	closeButton: { type: 'boolean' },
 	closeRequests: { type: 'boolean' },
@@ -210,6 +263,8 @@ const guildSettings = {
 		type: 'snowflake',
 	},
 	logExclude: { type: logExclude },
+	moveRelease: { type: 'boolean' },
+	moveResend: { type: 'boolean' },
 	primaryColour: {
 		options: { max: 32 },
 		type: 'string',
@@ -232,6 +287,10 @@ const guildSettings = {
 		type: 'snowflake',
 	},
 	transcriptDm: { type: 'boolean' },
+	userLimit: {
+		options: { max: 100 },
+		type: 'int',
+	},
 	webhookSecret: {
 		nullable: true,
 		options: { max: 256 },
@@ -257,6 +316,15 @@ const category = {
 	},
 	anonymous: { type: 'boolean' },
 	blockedRoles: { type: 'snowflakes' },
+	buttonLabel: {
+		nullable: true,
+		options: { max: 80 },
+		type: 'string',
+	},
+	buttonStyle: {
+		nullable: true,
+		type: buttonStyle,
+	},
 	channelName: {
 		options: { max: 100 },
 		type: 'string',
@@ -282,11 +350,26 @@ const category = {
 		nullable: true,
 		type: 'boolean',
 	},
+	closedChannelName: {
+		nullable: true,
+		options: { max: 100 },
+		type: 'string',
+	},
+	closedLimit: {
+		options: { max: 100 },
+		type: 'int',
+	},
+	closedMessage: {
+		nullable: true,
+		options: { max: 2000 },
+		type: 'string',
+	},
 	cooldown: {
 		nullable: true,
 		options: { max: MAX_DURATION },
 		type: 'int',
 	},
+	creatorRoles: { type: creatorRoles },
 	customTopic: {
 		nullable: true,
 		options: { max: 45 },
@@ -318,6 +401,11 @@ const category = {
 		options: { max: 100 },
 		type: 'string',
 	},
+	openDm: {
+		nullable: true,
+		options: { max: 2000 },
+		type: 'string',
+	},
 	openingMessage: {
 		options: { max: 4096 },
 		type: 'string',
@@ -328,11 +416,22 @@ const category = {
 			return value;
 		},
 	},
+	outOfHours: {
+		type: (value, field) => {
+			if (!['BLOCK', 'WARN'].includes(value)) throw new ValidationError(field, 'expected "WARN" or "BLOCK"');
+			return value;
+		},
+	},
 	pingRoleRules: { type: pingRoleRules },
 	pingRoles: { type: 'snowflakes' },
 	ratelimit: {
 		nullable: true,
 		type: 'int',
+	},
+	reopenedMessage: {
+		nullable: true,
+		options: { max: 2000 },
+		type: 'string',
 	},
 	requireTopic: { type: 'boolean' },
 	requiredRoles: { type: 'snowflakes' },
@@ -343,8 +442,13 @@ const category = {
 		type: 'int',
 	},
 	staffRoles: { type: 'snowflakes' },
+	staffThread: { type: 'boolean' },
 	suggestTags: { type: 'boolean' },
 	totalLimit: { type: 'int' },
+	workingHours: {
+		nullable: true,
+		type: workingHours,
+	},
 };
 
 /** @type {Record<string, FieldSpec>} */
@@ -466,6 +570,9 @@ function sanitizeCategory(body) {
 }
 
 module.exports = {
+	BUTTON_STYLES,
+	CREATOR_ROLE_EVENTS,
+	CUSTOM_BUTTONS,
 	LOG_EVENTS,
 	SNOWFLAKE,
 	ValidationError,

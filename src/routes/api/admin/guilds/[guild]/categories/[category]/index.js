@@ -1,6 +1,7 @@
 const { logAdminEvent } = require('../../../../../../../lib/logging');
 const { sanitizeCategory } = require('../../../../../../../lib/validation');
 const { checkCategoryRefs } = require('../../../../../../../lib/category-refs');
+const { checkCreatorRoles } = require('../../../../../../../lib/tickets/lifecycle');
 const {
 	updateCommandPermissions,
 	updateStaffRoles,
@@ -93,6 +94,17 @@ module.exports.patch = fastify => ({
 		const select = {
 			anonymous: true,
 			archive: true,
+			buttonLabel: true,
+			buttonStyle: true,
+			closedChannelName: true,
+			closedLimit: true,
+			closedMessage: true,
+			creatorRoles: true,
+			openDm: true,
+			outOfHours: true,
+			reopenedMessage: true,
+			staffThread: true,
+			workingHours: true,
 			autoClose: true,
 			blockedRoles: true,
 			channelName: true,
@@ -154,6 +166,11 @@ module.exports.patch = fastify => ({
 		});
 
 		if (!original || original.guildId !== guildId) return res.status(400).send(new Error('Bad Request'));
+
+		// creator roles are only checked when they change, so admins who can't manage roles can still edit the rest
+		if (data.creatorRoles && JSON.stringify(data.creatorRoles) !== JSON.stringify(original.creatorRoles ?? {})) {
+			checkCreatorRoles(guild, await guild.members.fetch(req.user.id), data.creatorRoles);
+		}
 
 		// questions that already exist must belong to this category; anything else is created
 		let questionWrites;

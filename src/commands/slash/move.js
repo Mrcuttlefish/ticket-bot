@@ -5,7 +5,15 @@ const {
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { isStaff } = require('../../lib/users');
 const { getEmoji } = require('./priority');
-const { formatChannelName } = require('../../lib/tickets/placeholders');
+const {
+	formatChannelName, formatOpeningMessage,
+} = require('../../lib/tickets/placeholders');
+const {
+	buildButtons, buildOpeningMessage, editOpeningButtons,
+} = require('../../lib/tickets/opening-message');
+const { resolveCategorySettings } = require('../../lib/tickets/options');
+const { pools } = require('../../lib/threads');
+
 module.exports = class MoveSlashCommand extends SlashCommand {
 	constructor(client, options) {
 		const name = 'move';
@@ -22,6 +30,12 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 					name: 'category',
 					required: true,
 					type: ApplicationCommandOptionType.Integer,
+				},
+				{
+					maxLength: 500,
+					name: 'reason',
+					required: false,
+					type: ApplicationCommandOptionType.String,
 				},
 			].map(option => {
 				option.descriptionLocalizations = client.i18n.getAllMessages(`commands.slash.${name}.options.${option.name}.description`);
@@ -99,6 +113,10 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 			});
 		}
 		const discordCategory = await interaction.guild.channels.fetch(newCategory.discordCategory);
+		const reason = interaction.options.getString('reason', false)?.trim().slice(0, 500) || null;
+		// servers can make /move release the ticket, so staff of the new category can pick it up (Ticket Tool parity, P2)
+		const claimer = ticket.claimedById;
+		const release = Boolean(ticket.guild.moveRelease && claimer);
 
 		if (discordCategory.children.cache.size === 50) {
 			return await interaction.editReply({
@@ -145,6 +163,7 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 			// these 3 could be done separately,
 			// but using `setParent`, `setName` etc instead of a single `edit` call increases the number of API requests
 			if (
+				release ||
 				JSON.stringify(newCategory.staffRoles) !== JSON.stringify(ticket.category.staffRoles) ||
 				newCategory.channelName !== ticket.category.channelName ||
 				newCategory.discordCategory !== ticket.category.discordCategory
@@ -175,6 +194,8 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 						// keep members that were added to the ticket, and the claimer (upstream #514)
 						...interaction.channel.permissionOverwrites.cache
 							.filter(o => o.type === OverwriteType.Member && o.id !== creator.id && o.id !== this.client.user.id)
+							// a released claimer loses the access that came with the claim
+							.filter(o => !(release && o.id === claimer))
 							.map(o => ({
 								allow: o.allow,
 								deny: o.deny,
@@ -182,7 +203,7 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 								type: OverwriteType.Member,
 							})),
 						// if the ticket is claimed, staff roles stay hidden like they are after /claim
-						...newCategory.staffRoles.map(id => (ticket.claimedById
+						...newCategory.staffRoles.map(id => (ticket.claimedById && !release
 							? {
 								deny: ['ViewChannel'],
 								id,
@@ -196,17 +217,90 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 				});
 			}
 
+			if (release) {
+				await client.prisma.ticket.update({
+					data: { claimedBy: { disconnect: true } },
+					where: { id: ticket.id },
+				});
+			}
+
 			await interaction.editReply({
 				embeds: [
 					new ExtendedEmbedBuilder()
 						.setColor(ticket.guild.primaryColour)
-						.setDescription(getMessage('commands.slash.move.moved', {
-							by: interaction.user.toString(),
+						.setDescription(getMessage(reason ? 'commands.slash.move.moved_reason' : 'commands.slash.move.moved', {
+							// anonymous tickets don't say which staff member moved them
+							by: newCategory.anonymous || ticket.category.anonymous ? getMessage('ticket.anonymous.staff') : interaction.user.toString(),
 							from: ticket.category.name,
+							reason,
 							to: newCategory.name,
 						})),
 				],
 			});
+
+			const category = await client.tickets.getCategory(newCategory.id, true);
+			const categorySettings = resolveCategorySettings(category.guild, category);
+			const claimed = Boolean(claimer) && !release;
+			const buttons = buildButtons({
+				claim: categorySettings.claimButton && category.claiming ? (claimed ? 'unclaim' : 'claim') : null,
+				close: categorySettings.closeButton,
+				custom: category.guild.buttons,
+				// a resent opening message only shows the topic (the old category's questions don't apply)
+				edit: !ticket.guild.moveResend && Boolean(ticket.topic),
+				getMessage,
+			});
+			if (ticket.guild.moveResend) {
+				// send the new category's opening message, which then holds the ticket's buttons
+				const topic = ticket.topic ? await pools.crypto.queue(w => w.decrypt(ticket.topic)) : null;
+				const sent = await interaction.channel.send({
+					...buildOpeningMessage({
+						author: {
+							avatar: creator.displayAvatarURL(),
+							name: creator.displayName,
+						},
+						buttons,
+						colour: category.guild.primaryColour,
+						content: creator.toString(),
+						description: formatOpeningMessage(category.openingMessage, {
+							category,
+							creator,
+							number: ticket.number,
+							topic,
+						}).trim() || null,
+						fields: topic ? [{
+							name: getMessage('ticket.opening_message.fields.topic'),
+							value: topic,
+						}] : [],
+						footer: category.guild.footer
+							? {
+								iconURL: interaction.guild.iconURL(),
+								text: category.guild.footer,
+							}
+							: null,
+						image: category.image,
+						style: category.openingStyle,
+						v2: category.guild.componentsV2,
+					}),
+					allowedMentions: { parse: [] }, // the creator was already pinged when the ticket opened
+				}).catch(error => {
+					client.log.warn(`Failed to send the opening message of the new category in ticket ${ticket.id}`, error);
+					return null;
+				});
+				if (sent) {
+					const old = await interaction.channel.messages.fetch(ticket.openingMessageId).catch(() => null);
+					if (old?.components.length) await editOpeningButtons(old, null).catch(() => null);
+					if (old?.pinned) await old.unpin().catch(() => null);
+					await sent.pin().catch(() => null);
+					await client.prisma.ticket.update({
+						data: { openingMessageId: sent.id },
+						where: { id: ticket.id },
+					});
+				}
+			} else if (release) {
+				const old = await interaction.channel.messages.fetch(ticket.openingMessageId).catch(() => null);
+				if (old?.components.length) await editOpeningButtons(old, buttons).catch(() => null);
+			}
+			await client.tickets.getTicket(ticket.id, true);
 
 		}
 	}

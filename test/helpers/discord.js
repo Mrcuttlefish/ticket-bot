@@ -15,15 +15,19 @@ let next = 100000000000000000n;
 const snowflake = () => String(++next);
 
 function makeRole(guild, {
-	id = snowflake(), name = 'role',
+	id = snowflake(), name = 'role', position = 1, permissions = 0n, managed = false,
 } = {}) {
 	const role = {
 		colour: 0,
+		comparePositionTo: other => role.position - (other?.position ?? 0),
 		createdAt: new Date(),
 		hexColor: '#000000',
 		guild,
 		id,
+		managed,
 		name,
+		permissions: new PermissionsBitField(permissions),
+		position,
 		toString: () => `<@&${id}>`,
 	};
 	guild.roles?.cache.set(id, role);
@@ -47,7 +51,7 @@ function makeUser({
 }
 
 function makeMember(guild, {
-	user = makeUser(), roles = [], admin = false, timedOut = false, status = 'online',
+	user = makeUser(), roles = [], admin = false, timedOut = false, status = 'online', permissions = 0n,
 } = {}) {
 	const member = {
 		displayAvatarURL: () => user.displayAvatarURL(),
@@ -56,11 +60,22 @@ function makeMember(guild, {
 		guild,
 		id: user.id,
 		isCommunicationDisabled: () => timedOut,
-		permissions: new PermissionsBitField(admin ? PermissionsBitField.Flags.ManageGuild : 0n),
+		permissions: new PermissionsBitField((admin ? PermissionsBitField.Flags.ManageGuild : 0n) | BigInt(permissions)),
 		presence: { status },
 		roles: {
+			add: async ids => {
+				for (const id of [ids].flat()) member.roles.cache.set(id, guild.roles.cache.get(id) ?? makeRole(guild, { id }));
+				return member;
+			},
 			cache: new Collection(roles.map(id => [id, guild.roles.cache.get(id) ?? makeRole(guild, { id })])),
+			get highest() {
+				return [...member.roles.cache.values()].sort((a, b) => b.position - a.position)[0] ?? guild.roles.everyone;
+			},
 			hoist: null,
+			remove: async ids => {
+				for (const id of [ids].flat()) member.roles.cache.delete(id);
+				return member;
+			},
 		},
 		send: async payload => {
 			member.dms.push(payload);
@@ -119,6 +134,10 @@ function makeMessage(channel, {
 		},
 		pinned: false,
 		react: async () => {},
+		unpin: async () => {
+			message.pinned = false;
+			return message;
+		},
 		reference: null,
 		stickers: new Collection(),
 		system: false,
@@ -217,6 +236,17 @@ function makeTextChannel(guild, {
 		setName: async value => (channel.name = value),
 		setParent: async value => (channel.parentId = value?.id ?? value),
 		setTopic: async value => (channel.topic = value),
+		threads: {
+			create: async options => {
+				const thread = makeTextChannel(guild, { name: options.name });
+				thread.type = options.type;
+				thread.parentId = channel.id;
+				thread.options = options;
+				channel.threads.created.push(thread);
+				return thread;
+			},
+			created: [],
+		},
 		toString: () => `<#${id}>`,
 		topic,
 		type: ChannelType.GuildText,
@@ -263,6 +293,7 @@ function makeGuild(client, {
 				guild.created.push(channel);
 				return channel;
 			},
+			fetch: async channelId => guild.channels.cache.get(channelId) ?? null,
 		},
 		client,
 		created: [],
@@ -285,10 +316,21 @@ function makeGuild(client, {
 	guild.roles.everyone = makeRole(guild, {
 		id,
 		name: '@everyone',
+		position: 0,
 	});
 	guild.roles.cache.set(id, guild.roles.everyone);
 	client.guilds.cache.set(guild.id, guild);
-	if (client.user) makeMember(guild, { user: client.user }); // the bot is a member of its servers
+	if (client.user) {
+		// the bot is a member of its servers, with a role near the top
+		const botRole = makeRole(guild, {
+			name: 'bot',
+			position: 100,
+		});
+		guild.members.me = makeMember(guild, {
+			roles: [botRole.id],
+			user: client.user,
+		});
+	}
 	return guild;
 }
 
@@ -355,6 +397,7 @@ function makeInteraction({
 		message,
 		options: {
 			getChannel: name => options[name] ?? null,
+			getInteger: name => options[name] ?? null,
 			getMember: name => options[name] ?? null,
 			getRole: name => options[name] ?? null,
 			getString: name => options[name] ?? null,

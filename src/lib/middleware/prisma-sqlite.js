@@ -13,6 +13,8 @@ const jsonFields = [
 	'holidays',
 	'blockedRoles',
 	'logExclude',
+	'creatorRoles',
+	'buttons',
 ];
 
 const traverse = (obj, action) => {
