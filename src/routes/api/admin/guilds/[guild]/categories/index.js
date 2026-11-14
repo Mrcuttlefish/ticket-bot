@@ -75,11 +75,10 @@ module.exports.get = fastify => ({
 });
 
 module.exports.post = fastify => ({
-	handler: async req => {
+	handler: async (req, res) => {
 		/** @type {import('client')} */
 		const client = req.routeOptions.config.client;
 
-		const user = await client.users.fetch(req.user.id);
 		const guild = client.guilds.cache.get(req.params.guild);
 		// only known fields; prevents nested relation writes and foreign key changes
 		const {
@@ -87,6 +86,15 @@ module.exports.post = fastify => ({
 			questions,
 		} = sanitizeCategory(req.body);
 		data.staffRoles ??= [];
+		// staff roles decide who can read and handle tickets, so only Manage Server can choose them
+		if (req.viaDashboardRole && data.staffRoles.length) {
+			return res.code(403).send({
+				error: 'Forbidden',
+				message: 'You need the Manage Server permission to choose staff roles.',
+				statusCode: 403,
+			});
+		}
+		const user = await client.users.fetch(req.user.id);
 		const allow = ['ViewChannel', 'ReadMessageHistory', 'SendMessages', 'EmbedLinks', 'AttachFiles'];
 
 		// drop roles that aren't in this server and reject Discord categories from other servers

@@ -68,5 +68,6 @@ module.exports.get = fastify => ({
 		await client.keyv.set(cacheKey, statistics, ms('5m'));
 		return statistics;
 	},
-	onRequest: [fastify.authenticate, fastify.isAdmin],
+	// staff and ticket statistics aren't settings: dashboard roles can't see them (see app.js isManager)
+	onRequest: [fastify.authenticate, fastify.isManager],
 });

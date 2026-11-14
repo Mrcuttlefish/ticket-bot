@@ -46,6 +46,25 @@ function getPortalEvents(client) {
 }
 
 /**
+ * The open live stream of each user (see the events route). Each user gets one: a new one (a page reload, or
+ * another tab) replaces the old one. Streams are told when their user's roles change or they leave a server, so
+ * they can check access again straight away.
+ * @param {import('client')} client
+ * @returns {Map<string, { close: (event: string) => void, onMemberChange: (guildId: string, removed: boolean) => void }>}
+ */
+function getPortalStreams(client) {
+	if (!client.portalStreams) {
+		client.portalStreams = new Map();
+		const notify = removed => member => {
+			if (member?.id && member.guild?.id) client.portalStreams.get(member.id)?.onMemberChange(member.guild.id, removed);
+		};
+		client.on?.('guildMemberUpdate', (oldMember, newMember) => notify(false)(newMember));
+		client.on?.('guildMemberRemove', notify(true));
+	}
+	return client.portalStreams;
+}
+
+/**
  * @typedef {object} Viewer
  * @property {import('discord.js').Guild} guild
  * @property {string} userId
@@ -165,6 +184,32 @@ async function findViewableTicket(req, res, include = {}) {
 		staff,
 		ticket,
 	};
+}
+
+/**
+ * Whether a user can still see a ticket, for connections that stay open (the live stream): they're still in the
+ * server and still allowed to see the ticket (they may have lost a staff role, or the ticket was claimed and hidden).
+ * @param {import('client')} client
+ * @param {string} guildId
+ * @param {string} userId
+ * @param {string} ticketId
+ * @returns {Promise<boolean>}
+ */
+async function canStillView(client, guildId, userId, ticketId) {
+	const guild = client.guilds.cache.get(guildId);
+	if (!guild || client.banned_guilds?.has(guildId)) return false;
+	const member = guild.members.cache.get(userId) ?? await guild.members.fetch(userId).catch(() => null);
+	if (!member) return false;
+	const viewer = await getViewer(client, guildId, userId);
+	const ticket = await client.prisma.ticket.findFirst({
+		include: { category: true },
+		where: {
+			guildId,
+			id: ticketId,
+		},
+	});
+	if (!ticket) return false;
+	return canView(ticket, userId, isTicketStaff(viewer, ticket));
 }
 
 /**
@@ -411,11 +456,13 @@ function checkWriteRequest(req) {
 module.exports = {
 	RateLimit,
 	STAFF_AUTHOR,
+	canStillView,
 	canView,
 	checkWriteRequest,
 	findViewableTicket,
 	getPermissions,
 	getPortalEvents,
+	getPortalStreams,
 	getUsers,
 	getViewer,
 	isExpired,

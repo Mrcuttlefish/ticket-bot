@@ -387,7 +387,7 @@ misc:
     description: You are not allowed to create tickets.
     title: ❌ Blocked
   button_denied:
-    description: Your roles can't use this button.
+    description: Your roles aren't allowed to do this.
     title: ❌ Not allowed
   category_full:
     description: |

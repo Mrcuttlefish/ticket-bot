@@ -34,5 +34,6 @@ module.exports.get = fastify => ({
 		// admins don't see who wrote anonymous staff messages either; only the server's full export has them
 		return JSON.stringify(anonymiseTicketRow(JSON.parse(exported), true));
 	},
-	onRequest: [fastify.authenticate, fastify.isAdmin],
+	// tickets aren't settings: dashboard roles can't read them (see app.js isManager)
+	onRequest: [fastify.authenticate, fastify.isManager],
 });

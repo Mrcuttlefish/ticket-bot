@@ -142,8 +142,9 @@ module.exports.getPrivilegeLevel = async member => {
 
 /**
  * Whether a member has one of the server's dashboard roles (`guild.dashboardRoles`), which let them change the
- * server's settings in the dashboard without Manage Server. They can't export or import (owner only), reset the
- * server's data, or change the dashboard roles themselves.
+ * server's settings in the dashboard without Manage Server. Settings only: they can't read tickets or statistics
+ * through the admin API, choose staff roles, delete a category that has tickets, export or import (owner only),
+ * reset the server's data, or change the dashboard roles themselves.
  * @param {import("discord.js").GuildMember} member
  * @returns {Promise<boolean>}
  */

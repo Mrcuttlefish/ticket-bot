@@ -85,39 +85,91 @@ function canUseButton(member, custom, name) {
 }
 
 /**
- * Check a button's role limits before running it. Replies (privately) and returns true if the member can't use it.
+ * Check an action's role limits before running it. The limits are set per button (`guild.buttons`), but they cover
+ * every way of doing the same thing: the button, its slash command (/claim, /release, /close, /reopen, /topic,
+ * /transcript, /new and the "create" context menus) and the portal's close button. Replies (privately) and
+ * returns true if the member can't do it.
  * @param {import('client')} client
- * @param {import('discord.js').ButtonInteraction} interaction
- * @param {string} name the button
+ * @param {import('discord.js').Interaction} interaction
+ * @param {string} name the button (see CUSTOM_BUTTONS in validation.js)
+ * @param {object} [options]
+ * @param {import('discord.js').Guild} [options.guild] the ticket's server, for interactions from DMs
+ * @param {import('discord.js').GuildMember} [options.member]
  * @returns {Promise<boolean>}
  */
-async function buttonDenied(client, interaction, name) {
-	if (!interaction.guild) return false;
+async function buttonDenied(client, interaction, name, {
+	guild = interaction.guild,
+	member,
+} = {}) {
+	if (!guild) return false;
 	const settings = await client.prisma.guild.findUnique({
 		select: {
 			buttons: true,
 			errorColour: true,
 			locale: true,
 		},
-		where: { id: interaction.guild.id },
+		where: { id: guild.id },
 	});
-	if (canUseButton(interaction.member, settings?.buttons, name)) return false;
+	const limits = settings?.buttons?.[name];
+	if (!limits || (!limits.allow?.length && !limits.deny?.length)) return false;
+	member ??= await getMember(guild, interaction);
+	if (canUseButton(member, settings.buttons, name)) return false;
 	const getMessage = client.i18n.getLocale(settings?.locale);
 	const ExtendedEmbedBuilder = require('./embed');
-	await interaction.reply({
+	const reply = {
 		embeds: [
 			new ExtendedEmbedBuilder()
 				.setColor(settings?.errorColour ?? 'Red')
 				.setTitle(getMessage('misc.button_denied.title'))
 				.setDescription(getMessage('misc.button_denied.description')),
 		],
-		flags: MessageFlags.Ephemeral,
-	});
+	};
+	if (interaction.deferred || interaction.replied) {
+		await interaction.editReply(reply);
+	} else {
+		await interaction.reply({
+			...reply,
+			flags: MessageFlags.Ephemeral,
+		});
+	}
 	return true;
+}
+
+/**
+ * The member behind an interaction in a server, even if the interaction came from a DM.
+ * @param {import('discord.js').Guild} guild
+ * @param {import('discord.js').Interaction} interaction
+ * @returns {Promise<import('discord.js').GuildMember | null>}
+ */
+async function getMember(guild, interaction) {
+	if (interaction.member && interaction.guildId === guild.id) return interaction.member;
+	return guild.members.cache.get(interaction.user.id) ??
+		await guild.members.fetch(interaction.user.id).catch(() => null);
+}
+
+/**
+ * Whether a member can do one of the button actions, for routes that don't reply to an interaction (the portal).
+ * @param {import('client')} client
+ * @param {import('discord.js').Guild} guild
+ * @param {string} userId
+ * @param {string} name the button
+ * @returns {Promise<boolean>}
+ */
+async function canDo(client, guild, userId, name) {
+	const settings = await client.prisma.guild.findUnique({
+		select: { buttons: true },
+		where: { id: guild.id },
+	});
+	const limits = settings?.buttons?.[name];
+	if (!limits || (!limits.allow?.length && !limits.deny?.length)) return true;
+	if (client.supers?.includes(userId)) return true;
+	const member = guild.members.cache.get(userId) ?? await guild.members.fetch(userId).catch(() => null);
+	return canUseButton(member, settings.buttons, name);
 }
 
 module.exports = {
 	buttonDenied,
+	canDo,
 	canUseButton,
 	customiseButton,
 	toButtonEmoji,

@@ -15,6 +15,14 @@ module.exports.delete = fastify => ({
 		const categoryId = Number(req.params.category);
 		const original = categoryId && await client.prisma.category.findUnique({ where: { id: categoryId } });
 		if (!original || original.guildId !== guild.id) return res.status(400).send(new Error('Bad Request'));
+		// deleting a category deletes its tickets too, which dashboard roles can't do (like resetting the server)
+		if (req.viaDashboardRole && await client.prisma.ticket.count({ where: { categoryId } })) {
+			return res.code(403).send({
+				error: 'Forbidden',
+				message: 'You need the Manage Server permission to delete a category that has tickets.',
+				statusCode: 403,
+			});
+		}
 		const category = await client.prisma.category.delete({ where: { id: categoryId } });
 
 		const staffRoles = await updateStaffRoles(guild);
@@ -171,6 +179,17 @@ module.exports.patch = fastify => ({
 		});
 
 		if (!original || original.guildId !== guildId) return res.status(400).send(new Error('Bad Request'));
+
+		// staff roles decide who can read and handle tickets, so only Manage Server can change them (roles that were
+		// deleted from the server are dropped by checkCategoryRefs and don't count as a change)
+		if (req.viaDashboardRole && data.staffRoles !== undefined &&
+			[...new Set(data.staffRoles)].sort().join() !== [...new Set(original.staffRoles ?? [])].filter(id => guild.roles.cache.has(id)).sort().join()) {
+			return res.code(403).send({
+				error: 'Forbidden',
+				message: 'You need the Manage Server permission to change staff roles.',
+				statusCode: 403,
+			});
+		}
 
 		// creator roles are only checked when they change, so admins who can't manage roles can still edit the rest
 		if (data.creatorRoles && JSON.stringify(data.creatorRoles) !== JSON.stringify(original.creatorRoles ?? {})) {
