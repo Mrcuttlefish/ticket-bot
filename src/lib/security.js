@@ -172,17 +172,46 @@ function checkTagWildcard(pattern) {
 }
 
 /**
+ * Whether `text` matches a wildcard pattern (`*` matches anything, everything else literally, ignoring case and
+ * surrounding whitespace). This is a greedy matcher that only backtracks to the last `*`, so it takes at most
+ * O(pattern × text) steps; a regular expression with several `.*` could take exponentially longer (ReDoS).
  * @param {string} pattern
- * @returns {RegExp | null}
+ * @param {string} text
+ * @returns {boolean}
+ */
+function matchWildcard(pattern, text) {
+	const p = [...pattern.replace(/\*+/g, '*').trim().toLowerCase()];
+	const t = [...String(text).trim().toLowerCase()];
+	let pi = 0;
+	let ti = 0;
+	let star = -1;
+	let mark = 0;
+	while (ti < t.length) {
+		if (pi < p.length && p[pi] !== '*' && p[pi] === t[ti]) {
+			pi++;
+			ti++;
+		} else if (pi < p.length && p[pi] === '*') {
+			star = pi++;
+			mark = ti;
+		} else if (star !== -1) {
+			pi = star + 1;
+			ti = ++mark;
+		} else {
+			return false;
+		}
+	}
+	while (pi < p.length && p[pi] === '*') pi++;
+	return pi === p.length;
+}
+
+/**
+ * A wildcard trigger as something with `test(text)`, like a RegExp, or null if it's empty or invalid.
+ * @param {string} pattern
+ * @returns {{ test: (text: string) => boolean } | null}
  */
 function compileTagWildcard(pattern) {
 	if (!pattern || !checkTagWildcard(pattern).ok) return null;
-	const source = pattern
-		.replace(/\*+/g, '*')
-		.split('')
-		.map(char => (char === '*' ? '.*' : escapeRegExp(char)))
-		.join('');
-	return new RegExp(`^\\s*${source}\\s*$`, 'is');
+	return { test: text => matchWildcard(pattern, text) };
 }
 
 /**
@@ -195,7 +224,7 @@ const checkTagPattern = (pattern, matchType = 'REGEX') => (matchType === 'WILDCA
 /**
  * Compile a tag's trigger, or null if it has none or it's invalid or unsafe.
  * @param {{ regex?: string | null, matchType?: string }} tag
- * @returns {RegExp | null}
+ * @returns {{ test: (text: string) => boolean } | null}
  */
 const compileTagPattern = tag => (tag?.matchType === 'WILDCARD' ? compileTagWildcard(tag.regex) : compileTagRegex(tag?.regex));
 
@@ -206,6 +235,7 @@ module.exports = {
 	compileTagPattern,
 	compileTagRegex,
 	compileTagWildcard,
+	matchWildcard,
 	escapeHTML,
 	escapeRegExp,
 	includesIgnoreCase,

@@ -95,6 +95,10 @@ module.exports.post = fastify => ({
 			// only known fields are copied so the file can't write to other guilds' data
 			const settings = sanitize(settingsJSON, schemas.guildSettings);
 			delete settings.webhookSecret; // never exported; it must be set again
+			// a backup from another server can't let its roles into this server's dashboard
+			if (settings.dashboardRoles) {
+				settings.dashboardRoles = settings.dashboardRoles.filter(roleId => roleId !== guild.id && guild.roles.cache.has(roleId));
+			}
 			if (settings.webhookUrl) userLog.warn('The webhook secret (if there was one) must be set again');
 			settings.tags = settingsJSON.tags.map(raw => {
 				const tag = sanitize(raw, schemas.tag);
@@ -112,6 +116,12 @@ module.exports.post = fastify => ({
 					data,
 					questions,
 				} = sanitizeCategory(raw);
+				// thread tickets need their channel in this server (it may be a backup of another one)
+				if (data.threadParent && guild.channels.cache.get(data.threadParent)?.guildId !== guild.id) {
+					userLog.warn(`The "${data.name}" category's thread channel isn't in this server, so it uses channels instead`);
+					data.channelType = 'CHANNEL';
+					data.threadParent = null;
+				}
 				data.questions = (questions ?? []).map(question => {
 					const newId = randomUUID();
 					if (question.id) questionMap.set(question.id, newId);
