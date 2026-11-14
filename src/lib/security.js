@@ -2,6 +2,8 @@
  * Small, dependency-free helpers for handling untrusted input.
  */
 
+const vm = require('node:vm');
+
 /**
  * Is `path` a same-origin relative path that is safe to redirect to?
  * Rejects protocol-relative URLs (`//evil.com`) and the backslash variant (`/\evil.com`),
@@ -133,11 +135,40 @@ function checkTagRegex(pattern) {
  * Compile a stored tag pattern, returning null (instead of throwing) if it is unusable.
  * Patterns stored before validation existed may be invalid or dangerous.
  * @param {string} pattern
- * @returns {RegExp | null}
+ * @returns {{ test: (text: string) => boolean } | null}
  */
 function compileTagRegex(pattern) {
 	if (!pattern || !checkTagRegex(pattern).ok) return null;
-	return new RegExp(pattern, 'mi');
+	const regex = new RegExp(pattern, 'mi');
+	return { test: text => testWithTimeout(regex, text) };
+}
+
+// how long a tag's pattern may run against one message
+const REGEX_TIMEOUT = 50;
+const regexContext = vm.createContext(Object.create(null));
+const regexScript = new vm.Script('regex.test(text)');
+
+/**
+ * Test a regular expression with a time limit. checkTagRegex only catches the common slow patterns (nested
+ * quantifiers); others, like `(a|a)*$`, can still take minutes on a short message and would freeze the bot for
+ * every server. A pattern that runs out of time counts as not matching.
+ * @param {RegExp} regex
+ * @param {string} text
+ * @param {number} [timeout] in ms
+ * @returns {boolean}
+ */
+function testWithTimeout(regex, text, timeout = REGEX_TIMEOUT) {
+	regexContext.regex = regex;
+	regexContext.text = String(text ?? '');
+	try {
+		return regexScript.runInContext(regexContext, { timeout }) === true;
+	} catch (error) {
+		if (error?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') return false;
+		throw error;
+	} finally {
+		regexContext.regex = null;
+		regexContext.text = null;
+	}
 }
 
 const MAX_WILDCARDS = 5;
@@ -236,6 +267,7 @@ module.exports = {
 	compileTagRegex,
 	compileTagWildcard,
 	matchWildcard,
+	testWithTimeout,
 	escapeHTML,
 	escapeRegExp,
 	includesIgnoreCase,

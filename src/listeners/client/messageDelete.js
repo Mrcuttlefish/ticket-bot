@@ -36,7 +36,7 @@ module.exports = class extends Listener {
 			},
 			where: { id: message.channel.id },
 		});
-		if (!ticket) return;
+		if (!ticket || ticket.guildId !== message.guild.id) return;
 
 		let content = message.cleanContent;
 

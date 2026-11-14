@@ -159,6 +159,8 @@ test('export a server and import it into another (existing data migrates cleanly
 	assert.notEqual(support.id, category.id);
 	assert.equal(settings.tags[0].name, 'faq');
 	assert.equal(settings.tickets.length, 1);
+	assert.equal(settings.tickets[0].open, false, 'a ticket whose channel is in another server is imported closed');
+	assert.ok(settings.tickets[0].closedAt);
 	const importedHello = settings.tickets[0].archivedMessages.find(m => m.id === hello.id);
 	assert.ok(importedHello?.content, 'archived messages and their content are imported');
 });

@@ -4,7 +4,6 @@ const {
 } = require('discord.js');
 const { isThreadTicket } = require('../../lib/tickets/access');
 const ExtendedEmbedBuilder = require('../../lib/embed');
-const { isStaff } = require('../../lib/users');
 const { getEmoji } = require('./priority');
 const {
 	formatChannelName, formatOpeningMessage,
@@ -84,7 +83,7 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 		if (!ticket.open) return await client.tickets.replyClosed(interaction, ticket);
 		const getMessage = client.i18n.getLocale(ticket.guild.locale);
 
-		if (!(await isStaff(interaction.guild, interaction.user.id))) { // if user is not staff
+		if (!client.tickets.isCategoryStaff(interaction.member, ticket.category)) { // staff for this ticket's category
 			return await interaction.editReply({
 				embeds: [
 					new ExtendedEmbedBuilder({
@@ -218,7 +217,8 @@ module.exports = class MoveSlashCommand extends SlashCommand {
 								type: OverwriteType.Member,
 							})),
 						// if the ticket is claimed, staff roles stay hidden like they are after /claim
-						...newCategory.staffRoles.map(id => (ticket.claimedById && !release
+						// (unless the new category doesn't hide claimed tickets)
+						...newCategory.staffRoles.map(id => (ticket.claimedById && !release && newCategory.claimHide !== false
 							? {
 								deny: ['ViewChannel'],
 								id,

@@ -248,7 +248,10 @@ function makeTextChannel(guild, {
 				thread.archived = false;
 				thread.members = {
 					add: async id => {
-						thread.members.cache.set(id, { id });
+						thread.members.cache.set(id, {
+							guildMember: guild.members.cache.get(id),
+							id,
+						});
 						return id;
 					},
 					cache: new Collection(),

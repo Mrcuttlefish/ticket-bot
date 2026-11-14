@@ -194,7 +194,20 @@ module.exports.post = fastify => ({
 				where: { id: { in: allResolved.map(([ticket]) => ticket.id) } },
 			})).map(ticket => ticket.id));
 			if (existing.size > 0) userLog.warn(`Skipped ${existing.size} tickets that are already stored on this instance`);
+			// A ticket's ID is its channel's ID, and the bot acts on that channel (it archives its messages, sends
+			// replies from the portal to it, and deletes it when the ticket closes). An edited file must not be able to
+			// point an open ticket at another server's channel, so a ticket only stays open if its channel is in this
+			// server; the rest are imported as closed tickets (their archives are kept).
 			const ticketsResolved = allResolved.filter(([ticket]) => !existing.has(ticket.id));
+			let closedCount = 0;
+			for (const [ticket] of ticketsResolved) {
+				if (ticket.open === false) continue;
+				if (guild.channels.cache.get(ticket.id)?.guildId === id) continue;
+				ticket.open = false;
+				ticket.closedAt ??= new Date();
+				closedCount++;
+			}
+			if (closedCount > 0) userLog.warn(`Closed ${closedCount} open tickets whose channels aren't in this server`);
 			const importedIds = new Set(ticketsResolved.map(([ticket]) => ticket.id));
 			for (const [ticket] of ticketsResolved) {
 				// tickets can only reference other tickets from the same import

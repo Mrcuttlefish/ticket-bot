@@ -19,6 +19,7 @@ const {
 	createThreadTicket,
 	getThreadParent,
 	isThreadTicket,
+	ticketMembers,
 } = require('./access');
 const { logTicketEvent } = require('../logging');
 const { increment } = require('../metrics');
@@ -855,7 +856,7 @@ module.exports = class TicketManager {
 
 			if (working && process.env.PUBLIC_BOT !== 'true') {
 				let online = 0;
-				for (const [, member] of channel.members) {
+				for (const member of ticketMembers(channel)) {
 					if (member.user.bot) continue;
 					if (!await isStaff(channel.guild, member.id)) continue;
 					if (member.presence && member.presence.status !== 'offline') online++;
@@ -994,7 +995,9 @@ module.exports = class TicketManager {
 		if (!ticket.open) return await this.replyClosed(interaction, ticket);
 		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
 
-		if (!(await isStaff(interaction.guild, interaction.user.id))) { // if user is not staff
+		// staff for this ticket's category: staff of another category who opened (or were added to) the ticket can't
+		// claim it, which would hide it from the category's own staff
+		if (!this.isCategoryStaff(interaction.member, ticket.category)) {
 			return await interaction.reply({
 				embeds: [
 					new ExtendedEmbedBuilder({
@@ -1139,7 +1142,9 @@ module.exports = class TicketManager {
 		if (!ticket.open) return await this.replyClosed(interaction, ticket);
 		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
 
-		if (!(await isStaff(interaction.guild, interaction.user.id))) { // if user is not staff
+		// staff for this ticket's category: staff of another category who opened (or were added to) the ticket can't
+		// claim it, which would hide it from the category's own staff
+		if (!this.isCategoryStaff(interaction.member, ticket.category)) {
 			return await interaction.reply({
 				embeds: [
 					new ExtendedEmbedBuilder({
@@ -1613,8 +1618,11 @@ module.exports = class TicketManager {
 			open: false,
 		};
 
+		// archived thread tickets aren't cached. A ticket's ID is its channel's ID, so the channel must be in the
+		// ticket's server: a ticket row must never be able to close (delete) another server's channel.
 		/** @type {import("discord.js").TextChannel} */
-		const channel = this.client.channels.cache.get(ticketId);
+		let channel = this.client.channels.cache.get(ticketId) ?? await this.client.channels.fetch(ticketId).catch(() => null);
+		if (channel && channel.guildId !== ticket.guildId) channel = null;
 		if (channel) {
 			const pinned = await channel.messages.fetchPinned();
 			data.pinnedMessageIds = [...pinned.keys()];
