@@ -81,6 +81,25 @@ module.exports = class TicketManager {
 		this.$stale = new Collection();
 		// IDs of anonymous staff messages that were posted again by the bot (see anonymous.js)
 		this.$relayed = new Set();
+		// work started after a ticket is created that the member doesn't wait for (see settle())
+		this.$background = new Set();
+	}
+
+	/**
+	 * Keep track of background work so it can be waited for (when shutting down, and in tests).
+	 * @param {Promise} promise
+	 */
+	track(promise) {
+		const tracked = Promise.resolve(promise)
+			.catch(error => this.client.log.error(error))
+			.finally(() => this.$background.delete(tracked));
+		this.$background.add(tracked);
+		return tracked;
+	}
+
+	/** Wait for background work started by track() to finish. */
+	async settle() {
+		while (this.$background.size) await Promise.allSettled([...this.$background]);
 	}
 
 	/**
@@ -763,7 +782,7 @@ module.exports = class TicketManager {
 
 			increment('tickets_created_total');
 			sendTicketWebhook(this.client, 'ticket.created', ticket.id);
-			this.afterCreate({
+			this.track(this.afterCreate({
 				category,
 				channel,
 				creator,
@@ -773,15 +792,15 @@ module.exports = class TicketManager {
 					...ticket,
 					topic,
 				},
-			}).catch(error => this.client.log.error(error));
-			logTicketEvent(this.client, {
+			}));
+			this.track(logTicketEvent(this.client, {
 				action: 'create',
 				target: {
 					id: ticket.id,
 					name: channel.toString(),
 				},
 				userId: interaction.user.id,
-			});
+			}));
 		} catch (error) {
 			const ref = getSUID();
 			this.client.log.warn.tickets('An error occurred whilst creating ticket', channel.id);
