@@ -28,7 +28,7 @@ jobs:
       - run: docker build -t ticket-bot:smoke .
       - name: Install Playwright and Chromium
         run: |
-          npm install -g playwright@1.56.1
-          npx -y playwright@1.56.1 install --with-deps chromium
+          npm install -g playwright@1.63.0
+          npx -y playwright@1.63.0 install --with-deps chromium
       - name: Run the image and load the dashboard
         run: NODE_PATH="$(npm root -g)" scripts/smoke/run.sh ticket-bot:smoke
