@@ -734,6 +734,7 @@ module.exports = class TicketManager {
 			number,
 			openingMessageId: sent.id,
 			topic: topic ? await crypto.queue(w => w.encrypt(topic)) : null,
+			waitingOn: 'STAFF', // for automations
 		};
 		if (referencesTicketId) data.referencesTicket = { connect: { id: referencesTicketId } };
 		if (answers) data.questionAnswers = { createMany: { data: answers } };
@@ -1555,9 +1556,14 @@ module.exports = class TicketManager {
 	/**
 	 * close a ticket
 	 * @param {string} ticketId
+	 * @param {object} options
+	 * @param {string} [options.closedBy]
+	 * @param {string} [options.reason]
+	 * @param {boolean} [options.deleteChannel] delete the channel even if the category keeps closed channels
 	 */
 	async finallyClose(ticketId, {
 		closedBy = null,
+		deleteChannel = false,
 		reason = null,
 	}) {
 		let ticket = await this.getTicket(ticketId, true);
@@ -1591,7 +1597,7 @@ module.exports = class TicketManager {
 		}
 
 		// some categories keep the channel after closing (until it's deleted, or for a while)
-		const keep = Boolean(channel) && keepsClosedChannels(ticket.category);
+		const keep = Boolean(channel) && !deleteChannel && keepsClosedChannels(ticket.category);
 		data.channelDeleteAt = keep ? getChannelDeleteAt(data.closedAt, ticket.category.keepClosedFor) : null;
 
 		try {

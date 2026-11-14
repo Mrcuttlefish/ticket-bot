@@ -1,4 +1,5 @@
 const { Button } = require('@eartharoid/dbf');
+const { buttonDenied } = require('../lib/buttons');
 const ExtendedEmbedBuilder = require('../lib/embed');
 const { isStaff } = require('../lib/users');
 const { MessageFlags } = require('discord.js');
@@ -16,6 +17,8 @@ module.exports = class CloseButton extends Button {
 	 * @param {import("discord.js").ButtonInteraction} interaction
 	 */
 	async run(id, interaction) {
+		// the creator's answer to a close request isn't limited, only the close button itself
+		if (id.accepted === undefined && await buttonDenied(this.client, interaction, 'close')) return;
 		/** @type {import("client")} */
 		const client = this.client;
 

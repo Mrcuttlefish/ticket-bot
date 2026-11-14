@@ -139,3 +139,20 @@ module.exports.getPrivilegeLevel = async member => {
 	else if (await this.isStaff(member.guild, member.id)) return 1;
 	else return 0;
 };
+
+/**
+ * Whether a member has one of the server's dashboard roles (`guild.dashboardRoles`), which let them change the
+ * server's settings in the dashboard without Manage Server. They can't export or import (owner only), reset the
+ * server's data, or change the dashboard roles themselves.
+ * @param {import("discord.js").GuildMember} member
+ * @returns {Promise<boolean>}
+ */
+module.exports.hasDashboardRole = async member => {
+	if (!member) return false;
+	const settings = await member.guild.client.prisma.guild.findUnique({
+		select: { dashboardRoles: true },
+		where: { id: member.guild.id },
+	});
+	const roles = Array.isArray(settings?.dashboardRoles) ? settings.dashboardRoles : [];
+	return roles.some(id => id !== member.guild.id && member.roles.cache.has(id));
+};

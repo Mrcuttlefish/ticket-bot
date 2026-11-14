@@ -105,6 +105,11 @@ module.exports.patch = fastify => ({
 			reopenedMessage: true,
 			staffThread: true,
 			workingHours: true,
+			// Ticket Tool parity, P3
+			automations: true,
+			channelType: true,
+			onCreatorLeave: true,
+			threadParent: true,
 			autoClose: true,
 			blockedRoles: true,
 			channelName: true,

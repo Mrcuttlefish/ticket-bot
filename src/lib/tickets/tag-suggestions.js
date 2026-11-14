@@ -12,7 +12,7 @@ const {
 } = require('discord.js');
 const ms = require('ms');
 const ExtendedEmbedBuilder = require('../embed');
-const { compileTagRegex } = require('../security');
+const { compileTagPattern } = require('../security');
 const {
 	fillTagPlaceholders, getGuildTags,
 } = require('../tags');
@@ -26,7 +26,7 @@ const escapeRegExp = string => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /**
  * Tags whose pattern matches the text, or whose name appears in it as a whole word or phrase.
  * Pattern matches come first (longer, more specific patterns before shorter ones), then name matches.
- * @param {{ name: string, regex?: string | null }[]} tags
+ * @param {{ name: string, regex?: string | null, matchType?: string }[]} tags
  * @param {string} text
  * @param {number} [limit]
  * @returns {object[]}
@@ -35,7 +35,7 @@ function findSuggestedTags(tags, text, limit = MAX_SUGGESTIONS) {
 	if (!text?.trim()) return [];
 	return tags
 		.map(tag => {
-			const regex = compileTagRegex(tag.regex);
+			const regex = compileTagPattern(tag);
 			let score = 0;
 			if (regex?.test(text)) score = 1000 + tag.regex.length;
 			else if (tag.name.trim().length >= 3 && new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(tag.name.trim())}($|[^\\p{L}\\p{N}])`, 'iu').test(text)) score = 1;

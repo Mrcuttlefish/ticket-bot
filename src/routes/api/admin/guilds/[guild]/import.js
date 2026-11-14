@@ -4,7 +4,7 @@ const { createInterface } = require('node:readline');
 const pkg = require('../../../../../../package.json');
 const { pools } = require('../../../../../lib/threads');
 const {
-	escapeHTML, checkTagRegex,
+	escapeHTML, checkTagPattern,
 } = require('../../../../../lib/security');
 const {
 	sanitize,
@@ -98,7 +98,7 @@ module.exports.post = fastify => ({
 			if (settings.webhookUrl) userLog.warn('The webhook secret (if there was one) must be set again');
 			settings.tags = settingsJSON.tags.map(raw => {
 				const tag = sanitize(raw, schemas.tag);
-				if (tag.regex && !checkTagRegex(tag.regex).ok) {
+				if (tag.regex && !checkTagPattern(tag.regex, tag.matchType).ok) {
 					userLog.warn(`Removed the unsafe or invalid pattern from the "${tag.name}" tag`);
 					tag.regex = null;
 				}

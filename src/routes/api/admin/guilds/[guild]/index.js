@@ -28,7 +28,7 @@ module.exports.delete = fastify => ({
 		});
 		return true;
 	},
-	onRequest: [fastify.authenticate, fastify.isAdmin],
+	onRequest: [fastify.authenticate, fastify.isManager],
 });
 
 module.exports.get = fastify => ({
@@ -112,6 +112,8 @@ module.exports.get = fastify => ({
 			// import to those who can use them (see the isOwner hook)
 			canManageData: client.supers.includes(req.user.id) || guild?.ownerId === req.user.id,
 			ownerId: guild?.ownerId ?? null,
+			// signed in with a dashboard role rather than Manage Server: no resetting or changing dashboard roles
+			viaDashboardRole: req.viaDashboardRole === true,
 		};
 	},
 	onRequest: [fastify.authenticate, fastify.isAdmin],

@@ -9,6 +9,7 @@ const {
 	sendToHouston,
 } = require('../../lib/stats');
 const handleStaleTickets = require('../../lib/stale');
+const { runAutomations } = require('../../lib/automations');
 const { deleteExpiredChannels } = require('../../lib/tickets/closed');
 const { syncIcons } = require('../../lib/icons');
 
@@ -145,6 +146,8 @@ module.exports = class extends Listener {
 			// send inactivity warnings and close stale tickets
 			const staleInterval = ms('15m');
 			setInterval(() => handleStaleTickets(client, staleInterval), staleInterval);
+			// per-category automations (lib/automations.js)
+			setInterval(() => runAutomations(client).catch(error => client.log.error(error)), staleInterval);
 		}
 	}
 };

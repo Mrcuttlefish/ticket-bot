@@ -383,6 +383,9 @@ misc:
   blocked:
     description: You are not allowed to create tickets.
     title: ❌ Blocked
+  button_denied:
+    description: Your roles can't use this button.
+    title: ❌ Not allowed
   category_full:
     description: |
       The category has reached its maximum capacity.
@@ -532,6 +535,7 @@ ticket:
   created:
     description: "Your ticket channel has been created: {channel}."
     title: ✅ Ticket created
+  creator_left: 👋 {user} left the server. This ticket stays open.
   deleting: 🗑️ This channel will be deleted in a few seconds…
   edited:
     description: Your changes have been saved.

@@ -28,7 +28,7 @@ module.exports.get = fastify => ({
 });
 
 module.exports.patch = fastify => ({
-	handler: async req => {
+	handler: async (req, res) => {
 		// only known fields; prevents nested relation writes and foreign key changes
 		const data = sanitize(req.body, schemas.guildSettings);
 		const colours = ['errorColour', 'primaryColour', 'successColour'];
@@ -64,6 +64,19 @@ module.exports.patch = fastify => ({
 		}
 
 		const original = await client.prisma.guild.findUnique({ where: { id } });
+		if (data.dashboardRoles !== undefined) {
+			const before = [...(original?.dashboardRoles ?? [])].sort().join();
+			const after = [...data.dashboardRoles].sort().join();
+			// only members with Manage Server can choose who else gets into the dashboard
+			if (before !== after && req.viaDashboardRole) {
+				return res.code(403).send({
+					error: 'Forbidden',
+					message: 'You need the Manage Server permission to change the dashboard roles.',
+					statusCode: 403,
+				});
+			}
+			data.dashboardRoles = data.dashboardRoles.filter(roleId => roleId !== id && guild.roles.cache.has(roleId));
+		}
 		const settings = await client.prisma.guild.update({
 			data: data,
 			include: { categories: { select: { id: true } } },

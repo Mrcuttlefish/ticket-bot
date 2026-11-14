@@ -131,7 +131,10 @@ module.exports.post = fastify => ({
 			viaWeb: true,
 		});
 
-		const data = { lastMessageAt: new Date() };
+		const data = {
+			lastMessageAt: new Date(),
+			waitingOn: staff && ticket.createdById !== req.user.id ? 'CREATOR' : 'STAFF',
+		};
 		if (staff && !ticket.firstResponseAt && ticket.createdById !== req.user.id) data.firstResponseAt = new Date();
 		await client.prisma.ticket.update({
 			data,

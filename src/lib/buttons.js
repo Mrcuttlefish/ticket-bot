@@ -4,7 +4,11 @@
  * (`buttonLabel` and `buttonStyle`). Anything not set keeps the default from the locale and icons.
  */
 
-const { ButtonStyle } = require('discord.js');
+const {
+	ButtonStyle,
+	MessageFlags,
+	PermissionFlagsBits,
+} = require('discord.js');
 const emoji = require('node-emoji');
 
 const STYLES = {
@@ -60,7 +64,61 @@ function customiseButton(button, custom, name) {
 	return button;
 }
 
+/**
+ * Whether a member can use one of the bot's buttons. Servers can limit buttons to some roles (`allow`) or keep
+ * some roles from using them (`deny`). Members with Manage Server can always use every button, so nobody can lock
+ * the server's admins out.
+ * @param {import('discord.js').GuildMember} member
+ * @param {Record<string, { allow?: string[], deny?: string[] }> | null | undefined} custom guild.buttons
+ * @param {string} name the button
+ * @returns {boolean}
+ */
+function canUseButton(member, custom, name) {
+	const settings = custom?.[name];
+	if (!settings || (!settings.allow?.length && !settings.deny?.length)) return true;
+	if (!member) return false;
+	if (member.guild?.ownerId === member.id || member.permissions?.has?.(PermissionFlagsBits.ManageGuild)) return true;
+	const has = id => member.roles?.cache?.has(id);
+	if (settings.deny?.some(has)) return false;
+	if (settings.allow?.length && !settings.allow.some(has)) return false;
+	return true;
+}
+
+/**
+ * Check a button's role limits before running it. Replies (privately) and returns true if the member can't use it.
+ * @param {import('client')} client
+ * @param {import('discord.js').ButtonInteraction} interaction
+ * @param {string} name the button
+ * @returns {Promise<boolean>}
+ */
+async function buttonDenied(client, interaction, name) {
+	if (!interaction.guild) return false;
+	const settings = await client.prisma.guild.findUnique({
+		select: {
+			buttons: true,
+			errorColour: true,
+			locale: true,
+		},
+		where: { id: interaction.guild.id },
+	});
+	if (canUseButton(interaction.member, settings?.buttons, name)) return false;
+	const getMessage = client.i18n.getLocale(settings?.locale);
+	const ExtendedEmbedBuilder = require('./embed');
+	await interaction.reply({
+		embeds: [
+			new ExtendedEmbedBuilder()
+				.setColor(settings?.errorColour ?? 'Red')
+				.setTitle(getMessage('misc.button_denied.title'))
+				.setDescription(getMessage('misc.button_denied.description')),
+		],
+		flags: MessageFlags.Ephemeral,
+	});
+	return true;
+}
+
 module.exports = {
+	buttonDenied,
+	canUseButton,
 	customiseButton,
 	toButtonEmoji,
 	toButtonStyle,

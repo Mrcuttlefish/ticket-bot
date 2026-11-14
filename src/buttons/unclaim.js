@@ -1,4 +1,5 @@
 const { Button } = require('@eartharoid/dbf');
+const { buttonDenied } = require('../lib/buttons');
 
 module.exports = class UnclaimButton extends Button {
 	constructor(client, options) {
@@ -13,6 +14,7 @@ module.exports = class UnclaimButton extends Button {
 	 * @param {import("discord.js").ChatInputCommandInteraction} interaction
 	 */
 	async run(id, interaction) {
+		if (await buttonDenied(this.client, interaction, 'unclaim')) return;
 		/** @type {import("client")} */
 		const client = this.client;
 

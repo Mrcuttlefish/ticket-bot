@@ -140,9 +140,72 @@ function compileTagRegex(pattern) {
 	return new RegExp(pattern, 'mi');
 }
 
+const MAX_WILDCARDS = 5;
+
+/**
+ * Check a wildcard trigger: `*` matches anything and everything else is matched literally (ignoring case), against
+ * the whole message.
+ * @param {string} pattern
+ * @returns {{ ok: boolean, reason?: string }}
+ */
+function checkTagWildcard(pattern) {
+	if (typeof pattern !== 'string') {
+		return {
+			ok: false,
+			reason: 'not a string',
+		};
+	}
+	if (pattern.length > 200) {
+		return {
+			ok: false,
+			reason: 'pattern is longer than 200 characters',
+		};
+	}
+	// each * adds a level of backtracking, so they're limited (repeated *s count once)
+	if ((pattern.replace(/\*+/g, '*').match(/\*/g) ?? []).length > MAX_WILDCARDS) {
+		return {
+			ok: false,
+			reason: `at most ${MAX_WILDCARDS} * wildcards`,
+		};
+	}
+	return { ok: true };
+}
+
+/**
+ * @param {string} pattern
+ * @returns {RegExp | null}
+ */
+function compileTagWildcard(pattern) {
+	if (!pattern || !checkTagWildcard(pattern).ok) return null;
+	const source = pattern
+		.replace(/\*+/g, '*')
+		.split('')
+		.map(char => (char === '*' ? '.*' : escapeRegExp(char)))
+		.join('');
+	return new RegExp(`^\\s*${source}\\s*$`, 'is');
+}
+
+/**
+ * Check a tag's trigger for its match type.
+ * @param {string} pattern
+ * @param {'REGEX' | 'WILDCARD'} [matchType]
+ */
+const checkTagPattern = (pattern, matchType = 'REGEX') => (matchType === 'WILDCARD' ? checkTagWildcard(pattern) : checkTagRegex(pattern));
+
+/**
+ * Compile a tag's trigger, or null if it has none or it's invalid or unsafe.
+ * @param {{ regex?: string | null, matchType?: string }} tag
+ * @returns {RegExp | null}
+ */
+const compileTagPattern = tag => (tag?.matchType === 'WILDCARD' ? compileTagWildcard(tag.regex) : compileTagRegex(tag?.regex));
+
 module.exports = {
+	checkTagPattern,
 	checkTagRegex,
+	checkTagWildcard,
+	compileTagPattern,
 	compileTagRegex,
+	compileTagWildcard,
 	escapeHTML,
 	escapeRegExp,
 	includesIgnoreCase,
