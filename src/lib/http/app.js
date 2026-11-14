@@ -150,7 +150,8 @@ module.exports = async function buildApp(client) {
 		}
 	};
 	fastify.decorate('isAdmin', requirePrivilege(2, { dashboardRoles: true }));
-	// Manage Server itself, for things dashboard roles can't do (resetting the server's data)
+	// Manage Server itself, for things dashboard roles can't do (reading tickets and statistics, resetting the
+	// server's data); dashboard roles are for settings only
 	fastify.decorate('isManager', requirePrivilege(2));
 	// exports hold every ticket's messages, including who wrote anonymous staff messages, and imports replace
 	// everything, so they're for the server's owner only

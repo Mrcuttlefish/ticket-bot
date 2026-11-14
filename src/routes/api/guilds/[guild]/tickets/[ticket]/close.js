@@ -1,6 +1,7 @@
 const {
 	checkWriteRequest, findViewableTicket, getPermissions,
 } = require('../../../../../../lib/tickets/portal');
+const { canDo } = require('../../../../../../lib/buttons');
 
 // POST /api/guilds/:guild/tickets/:ticket/close { reason? } (archive portal, upstream #337)
 module.exports.post = fastify => ({
@@ -24,6 +25,15 @@ module.exports.post = fastify => ({
 			return res.code(403).send({
 				error: 'Forbidden',
 				message: 'This ticket is already closed.',
+				statusCode: 403,
+			});
+		}
+		// the close button's role limits cover the portal too (see lib/buttons.js)
+		const guild = client.guilds.cache.get(ticket.guildId);
+		if (!guild || !await canDo(client, guild, req.user.id, 'close')) {
+			return res.code(403).send({
+				error: 'Forbidden',
+				message: 'Your roles aren\'t allowed to close tickets.',
 				statusCode: 403,
 			});
 		}

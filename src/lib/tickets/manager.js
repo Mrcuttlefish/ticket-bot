@@ -58,7 +58,9 @@ const { PermissionsBitField } = require('discord.js');
 const {
 	applyCreatorRoles, countKeptClosedTickets, createStaffThread, formatLifecycleMessage,
 } = require('./lifecycle');
-const { customiseButton } = require('../buttons');
+const {
+	buttonDenied, customiseButton,
+} = require('../buttons');
 
 const { crypto } = pools;
 
@@ -260,6 +262,12 @@ module.exports = class TicketManager {
 		const guild = this.client.guilds.cache.get(category.guild.id);
 		const member = interaction.member ?? await guild.members.fetch(interaction.user.id);
 		const getMessage = this.client.i18n.getLocale(category.guild.locale);
+
+		// role limits on the create button cover every way of opening a ticket (see lib/buttons.js)
+		if (await buttonDenied(this.client, interaction, 'create', {
+			guild,
+			member,
+		})) return;
 
 		const rlKey = `ratelimits/guild-user:${category.guildId}-${interaction.user.id}`;
 		const rl = await this.client.keyv.get(rlKey);
@@ -983,6 +991,7 @@ module.exports = class TicketManager {
 	 * @param {import("discord.js").ChatInputCommandInteraction|import("discord.js").ButtonInteraction} interaction
 	 */
 	async claim(interaction) {
+		if (await buttonDenied(this.client, interaction, 'claim')) return;
 		const ticket = await this.client.prisma.ticket.findUnique({
 			include: {
 				_count: { select: { questionAnswers: true } },
@@ -1130,6 +1139,7 @@ module.exports = class TicketManager {
 	 * @param {import("discord.js").ChatInputCommandInteraction|import("discord.js").ButtonInteraction} interaction
 	 */
 	async release(interaction) {
+		if (await buttonDenied(this.client, interaction, 'unclaim')) return;
 		const ticket = await this.client.prisma.ticket.findUnique({
 			include: {
 				_count: { select: { questionAnswers: true } },
@@ -1255,6 +1265,7 @@ module.exports = class TicketManager {
 	 * @param {import("discord.js").ChatInputCommandInteraction|import("discord.js").ButtonInteraction} interaction
 	 */
 	async reopen(interaction) {
+		if (await buttonDenied(this.client, interaction, 'reopen')) return;
 		const ticket = await this.getClosedTicketFor(interaction);
 		if (!ticket) return;
 		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
@@ -1335,6 +1346,7 @@ module.exports = class TicketManager {
 	 * @param {import("discord.js").ChatInputCommandInteraction|import("discord.js").ButtonInteraction} interaction
 	 */
 	async deleteClosed(interaction) {
+		if (await buttonDenied(this.client, interaction, 'delete')) return;
 		const ticket = await this.getClosedTicketFor(interaction);
 		if (!ticket) return;
 		const getMessage = this.client.i18n.getLocale(ticket.guild.locale);
@@ -1401,6 +1413,7 @@ module.exports = class TicketManager {
 	 * @param {import("discord.js").ChatInputCommandInteraction|import("discord.js").ButtonInteraction} interaction
 	 */
 	async beforeRequestClose(interaction) {
+		if (await buttonDenied(this.client, interaction, 'close')) return;
 		const ticket = await this.getTicket(interaction.channel.id);
 		if (!ticket) {
 			await interaction.deferReply({ flags: MessageFlags.Ephemeral });

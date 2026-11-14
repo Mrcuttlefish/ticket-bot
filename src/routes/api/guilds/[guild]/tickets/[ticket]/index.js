@@ -2,6 +2,7 @@ const {
 	findViewableTicket, getPermissions, serializeTicket,
 } = require('../../../../../../lib/tickets/portal');
 const { pools } = require('../../../../../../lib/threads');
+const { canDo } = require('../../../../../../lib/buttons');
 
 const { crypto } = pools;
 
@@ -17,6 +18,14 @@ module.exports.get = fastify => ({
 		const {
 			staff, ticket,
 		} = found;
+		const permissions = getPermissions(ticket, req.user.id, staff);
+		// hide the close button from roles the close button's limits leave out (see lib/buttons.js)
+		if (permissions.canClose) {
+			/** @type {import('client')} */
+			const client = req.routeOptions.config.client;
+			const guild = client.guilds.cache.get(ticket.guildId);
+			permissions.canClose = Boolean(guild) && await canDo(client, guild, req.user.id, 'close');
+		}
 		const decrypt = value => (value ? crypto.queue(w => w.decrypt(value)) : value);
 		return {
 			...await serializeTicket(ticket),
@@ -27,7 +36,7 @@ module.exports.get = fastify => ({
 					rating: ticket.feedback.rating,
 				}
 				: null,
-			permissions: getPermissions(ticket, req.user.id, staff),
+			permissions,
 			questionAnswers: await Promise.all(ticket.questionAnswers.map(async answer => ({
 				label: answer.question.label,
 				questionId: answer.questionId,

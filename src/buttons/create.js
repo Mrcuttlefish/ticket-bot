@@ -1,5 +1,4 @@
 const { Button } = require('@eartharoid/dbf');
-const { buttonDenied } = require('../lib/buttons');
 const { MessageFlags } = require('discord.js');
 const ExtendedEmbedBuilder = require('../lib/embed');
 
@@ -16,8 +15,6 @@ module.exports = class CreateButton extends Button {
 	 * @param {import("discord.js").ButtonInteraction} interaction
 	 */
 	async run(id, interaction) {
-		// "create" is every create button: panels and "create a ticket for this user" prompts
-		if (await buttonDenied(this.client, interaction, 'create')) return;
 		// "Create ticket for user" prompts are posted in a public channel; only the target may use them (upstream #614)
 		if (id.targetUser && id.targetUser !== interaction.user.id) {
 			const settings = await this.client.prisma.guild.findUnique({

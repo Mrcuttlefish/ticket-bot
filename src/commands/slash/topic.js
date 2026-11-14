@@ -8,6 +8,7 @@ const {
 } = require('discord.js');
 const ExtendedEmbedBuilder = require('../../lib/embed');
 const { isStaff } = require('../../lib/users');
+const { buttonDenied } = require('../../lib/buttons');
 const { pools } = require('../../lib/threads');
 
 const { crypto } = pools;
@@ -31,6 +32,8 @@ module.exports = class TopicSlashCommand extends SlashCommand {
 	async run(interaction) {
 		/** @type {import("client")} */
 		const client = this.client;
+		// the edit button's role limits cover /topic too (see lib/buttons.js)
+		if (await buttonDenied(client, interaction, 'edit')) return;
 
 		const ticket = await client.prisma.ticket.findUnique({
 			select: {

@@ -435,22 +435,22 @@ test('button roles: buttons can be limited to roles, and Manage Server can alway
 	};
 	const trainee = makeMember(guild, { roles: [staffRole.id, traineeRole.id] });
 	let interaction = await click(trainee);
-	assert.match(embedText(interaction.responses[0].data), /can't use this button/);
+	assert.match(embedText(interaction.responses[0].data), /aren't allowed to do this/);
 	assert.equal((await client.prisma.ticket.findUnique({ where: { id: channel.id } })).claimedById, null);
 
 	const outsider = makeMember(guild);
 	interaction = await click(outsider);
-	assert.match(embedText(interaction.responses[0].data), /can't use this button/);
+	assert.match(embedText(interaction.responses[0].data), /aren't allowed to do this/);
 
 	const admin = makeMember(guild, {
 		admin: true,
 		roles: [traineeRole.id],
 	});
 	interaction = await click(admin);
-	assert.doesNotMatch(embedText(interaction.responses[0]?.data), /can't use this button/);
+	assert.doesNotMatch(embedText(interaction.responses[0]?.data), /aren't allowed to do this/);
 
 	interaction = await click(staff);
-	assert.doesNotMatch(embedText(interaction.responses[0]?.data), /can't use this button/);
+	assert.doesNotMatch(embedText(interaction.responses[0]?.data), /aren't allowed to do this/);
 });
 
 test('admin API: button role limits are validated', async () => {

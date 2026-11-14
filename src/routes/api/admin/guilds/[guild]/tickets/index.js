@@ -27,6 +27,7 @@ module.exports.get = fastify => ({
 			}),
 		);
 	},
-	onRequest: [fastify.authenticate, fastify.isAdmin],
+	// tickets aren't settings: dashboard roles can't read them (see app.js isManager)
+	onRequest: [fastify.authenticate, fastify.isManager],
 });
 

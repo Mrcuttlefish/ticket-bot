@@ -13,6 +13,7 @@ const { formatChannelName } = require('../../lib/tickets/placeholders');
 const { pools } = require('../../lib/threads');
 const { anonymiseTranscript } = require('../../lib/tickets/anonymous');
 const { TRANSCRIPT_INCLUDE } = require('../../lib/tickets/transcript-file');
+const { buttonDenied } = require('../../lib/buttons');
 
 const { transcript: pool } = pools;
 
@@ -143,6 +144,9 @@ module.exports = class TranscriptSlashCommand extends SlashCommand {
 		});
 
 		if (!ticket) throw new Error(`Ticket ${ticketId} does not exist`);
+		// the transcript button's role limits cover /transcript too (see lib/buttons.js); may be used in DMs
+		const ticketGuild = client.guilds.cache.get(ticket.guildId);
+		if (ticketGuild && await buttonDenied(client, interaction, 'transcript', { guild: ticketGuild })) return;
 
 		if (!this.shouldAllowAccess(interaction, ticket)) {
 			// may be used in DMs, so use the ticket's guild rather than `interaction.guild`
